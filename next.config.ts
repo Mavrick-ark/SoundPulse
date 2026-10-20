@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
+const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:3000";
+
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     rules: {
       "*.css": {
@@ -11,6 +10,24 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "**" },
+      { protocol: "http", hostname: "**" },
+    ],
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${BACKEND_URL}/api/:path*`,
+      },
+      {
+        source: "/uploads/:path*",
+        destination: `${BACKEND_URL}/uploads/:path*`,
+      },
+    ];
   },
 };
 

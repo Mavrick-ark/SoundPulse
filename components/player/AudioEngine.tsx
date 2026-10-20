@@ -1,0 +1,344 @@
+'use client';
+
+import React, { useEffect, useRef } from 'react';
+import { usePlayerStore } from '@/lib/store';
+import { resolveTrackDetails } from '@/lib/api';
+
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: () => void;
+  }
+}
+
+export const AudioEngine: React.FC = () => {
+  const {
+    currentSong,
+    isPlaying,
+    currentTime,
+    seekTarget,
+    volume,
+    isMuted,
+    nextSong,
+    setCurrentTime,
+    setDuration,
+    clearSeekTarget,
+    updateCurrentSong,
+  } = usePlayerStore();
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ytPlayerRef = useRef<any>(null);
+  const isYtReadyRef = useRef<boolean>(false);
+  const intervalRef = useRef<any>(null);
+  const lastSongIdRef = useRef<number | null>(null);
+  const resolvingRef = useRef<boolean>(false);
+
+  // Initialize YouTube Iframe API
+  useEffect(() => {
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+
+      window.onYouTubeIframeAPIReady = () => {
+        initYTPlayer();
+      };
+    } else if (window.YT && window.YT.Player) {
+      initYTPlayer();
+    }
+
+    function initYTPlayer() {
+      try {
+        ytPlayerRef.current = new window.YT.Player('soundpulse-persistent-yt-iframe', {
+          height: '10',
+          width: '10',
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            rel: 0,
+            origin: typeof window !== 'undefined' ? window.location.origin : '',
+          },
+          events: {
+            onReady: () => {
+              isYtReadyRef.current = true;
+              if (currentSong && currentSong.youtube_id && !currentSong.audio_url) {
+                ytPlayerRef.current.loadVideoById(currentSong.youtube_id);
+              }
+            },
+            onStateChange: (event: any) => {
+              // 0 = ENDED (natural end of full-length video)
+              if (event.data === 0) {
+                nextSong();
+              }
+            },
+            onError: (err: any) => {
+              console.warn('YouTube Player Event Warning:', err);
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('Could not init YouTube player instance:', err);
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  // Handle Seek Target (Scrubbing / Click to Seek)
+  useEffect(() => {
+    if (seekTarget === null) return;
+
+    if (currentSong?.audio_url && audioRef.current) {
+      audioRef.current.currentTime = seekTarget;
+    } else if (currentSong?.youtube_id && ytPlayerRef.current?.seekTo) {
+      try {
+        ytPlayerRef.current.seekTo(seekTarget, true);
+      } catch (_) {}
+    }
+
+    clearSeekTarget();
+  }, [seekTarget, currentSong, clearSeekTarget]);
+
+  // Handle Song Change & Auto-Resolve Full Tracks and Lyrics
+  useEffect(() => {
+    if (!currentSong) return;
+
+    const isNewSong = lastSongIdRef.current !== currentSong.song_id;
+    lastSongIdRef.current = currentSong.song_id;
+
+    if (!isNewSong) return;
+
+    if (currentSong.duration) {
+      setDuration(currentSong.duration);
+    }
+
+    const isLocalTrack = Boolean(
+      currentSong.audio_url &&
+        (currentSong.audio_url.startsWith('/uploads') ||
+          currentSong.audio_url.startsWith('blob:') ||
+          currentSong.audio_url.includes('127.0.0.1'))
+    );
+
+    // 1. Play local lossless track via HTML5 Audio
+    if (isLocalTrack && currentSong.audio_url) {
+      if (ytPlayerRef.current?.stopVideo) {
+        try { ytPlayerRef.current.stopVideo(); } catch (_) {}
+      }
+      if (audioRef.current) {
+        audioRef.current.src = currentSong.audio_url;
+        audioRef.current.currentTime = 0;
+        if (isPlaying) {
+          audioRef.current.play().catch((e) => console.warn('Audio play prevented:', e));
+        }
+      }
+      return;
+    }
+
+    // 2. Play existing YouTube Track
+    if (currentSong.youtube_id) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      if (isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
+        try {
+          ytPlayerRef.current.loadVideoById(currentSong.youtube_id);
+          if (!isPlaying) {
+            ytPlayerRef.current.pauseVideo();
+          }
+        } catch (e) {
+          console.warn('YT loadVideoById error:', e);
+        }
+      }
+      // If missing synced lyrics, fetch them in background
+      if (!currentSong.synced_lyrics) {
+        resolveTrackDetails(currentSong.song_name, currentSong.artist_name).then((res) => {
+          if (res?.synced_lyrics || res?.lyrics) {
+            updateCurrentSong({
+              synced_lyrics: res.synced_lyrics,
+              lyrics: res.lyrics,
+            });
+          }
+        });
+      }
+      return;
+    }
+
+    // 3. Track does NOT have local audio or YouTube ID -> Resolve Full Track & Lyrics dynamically!
+    if (!resolvingRef.current) {
+      resolvingRef.current = true;
+      resolveTrackDetails(currentSong.song_name, currentSong.artist_name)
+        .then((res) => {
+          resolvingRef.current = false;
+          if (res?.youtube_id) {
+            updateCurrentSong({
+              youtube_id: res.youtube_id,
+              synced_lyrics: res.synced_lyrics,
+              lyrics: res.lyrics,
+            });
+
+            if (audioRef.current) {
+              audioRef.current.pause();
+            }
+
+            if (isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
+              ytPlayerRef.current.loadVideoById(res.youtube_id);
+              if (!isPlaying) {
+                ytPlayerRef.current.pauseVideo();
+              }
+            }
+          }
+        })
+        .catch(() => {
+          resolvingRef.current = false;
+        });
+    }
+  }, [currentSong, updateCurrentSong, isPlaying, setDuration]);
+
+  // Handle Play/Pause
+  useEffect(() => {
+    if (!currentSong) return;
+
+    const isLocalTrack = Boolean(
+      currentSong.audio_url &&
+        (currentSong.audio_url.startsWith('/uploads') ||
+          currentSong.audio_url.startsWith('blob:') ||
+          currentSong.audio_url.includes('127.0.0.1'))
+    );
+
+    if (isLocalTrack && audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.play().catch((e) => console.warn('Audio play failed:', e));
+      } else {
+        audioRef.current.pause();
+      }
+    } else if (currentSong.youtube_id && ytPlayerRef.current) {
+      try {
+        if (isPlaying && ytPlayerRef.current.playVideo) {
+          ytPlayerRef.current.playVideo();
+        } else if (!isPlaying && ytPlayerRef.current.pauseVideo) {
+          ytPlayerRef.current.pauseVideo();
+        }
+      } catch (e) {
+        console.warn('YT play/pause error:', e);
+      }
+    }
+  }, [isPlaying, currentSong]);
+
+  // Volume & Mute Control
+  useEffect(() => {
+    const effectiveVol = isMuted ? 0 : volume;
+    if (audioRef.current) {
+      audioRef.current.volume = effectiveVol;
+    }
+    if (ytPlayerRef.current?.setVolume) {
+      try {
+        if (isMuted) {
+          ytPlayerRef.current.mute();
+        } else {
+          ytPlayerRef.current.unMute();
+          ytPlayerRef.current.setVolume(Math.round(volume * 100));
+        }
+      } catch (e) {
+        console.warn('YT volume change error:', e);
+      }
+    }
+  }, [volume, isMuted]);
+
+  // Real-time Playback Time Polling for lyrics sync & progress scrubber
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    if (isPlaying) {
+      intervalRef.current = setInterval(() => {
+        const isLocalTrack = Boolean(
+          currentSong?.audio_url &&
+            (currentSong.audio_url.startsWith('/uploads') ||
+              currentSong.audio_url.startsWith('blob:') ||
+              currentSong.audio_url.includes('127.0.0.1'))
+        );
+
+        if (isLocalTrack && audioRef.current) {
+          const t = audioRef.current.currentTime;
+          setCurrentTime(t);
+          if (audioRef.current.duration && !isNaN(audioRef.current.duration)) {
+            setDuration(audioRef.current.duration);
+          }
+        } else if (currentSong?.youtube_id && ytPlayerRef.current?.getCurrentTime) {
+          try {
+            const t = ytPlayerRef.current.getCurrentTime();
+            if (typeof t === 'number' && !isNaN(t)) {
+              setCurrentTime(t);
+            }
+            const d = ytPlayerRef.current.getDuration();
+            if (typeof d === 'number' && !isNaN(d) && d > 0) {
+              setDuration(d);
+            }
+          } catch (_) {}
+        }
+      }, 250);
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isPlaying, currentSong, setCurrentTime, setDuration]);
+
+  // Handle Natural Audio Ending (Guarding Against 30s Previews)
+  const handleAudioEnded = () => {
+    if (!currentSong) return;
+
+    // Check if the audio ended prematurely because it was an external 30s preview
+    const audioDur = audioRef.current?.duration || 0;
+    const expectedDur = currentSong.duration || 0;
+
+    if (audioDur <= 35 && expectedDur > 40 && !currentSong.audio_url?.startsWith('/uploads')) {
+      // 30s preview ended -> switch seamlessly to full original YouTube track!
+      resolveTrackDetails(currentSong.song_name, currentSong.artist_name).then((res) => {
+        if (res?.youtube_id) {
+          updateCurrentSong({
+            youtube_id: res.youtube_id,
+            synced_lyrics: res.synced_lyrics,
+            audio_url: null, // clear preview
+          });
+          if (audioRef.current) audioRef.current.pause();
+          if (ytPlayerRef.current?.loadVideoById) {
+            ytPlayerRef.current.loadVideoById(res.youtube_id);
+          }
+        } else {
+          nextSong();
+        }
+      });
+      return;
+    }
+
+    // Natural full track completion
+    nextSong();
+  };
+
+  return (
+    <>
+      {/* HTML5 Audio for Full-Length Authorized Local Tracks */}
+      <audio
+        ref={audioRef}
+        onEnded={handleAudioEnded}
+        onTimeUpdate={() => {
+          if (audioRef.current) {
+            setCurrentTime(audioRef.current.currentTime);
+          }
+        }}
+        preload="auto"
+      />
+
+      {/* Persistent YouTube Player Container for Full-Length YouTube Streaming */}
+      <div
+        id="soundpulse-persistent-yt-iframe"
+        className="pointer-events-none fixed -bottom-20 -right-20 w-4 h-4 opacity-0 z-0"
+      />
+    </>
+  );
+};
