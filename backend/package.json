@@ -1,0 +1,26 @@
+{
+  "name": "music-playlist-dbms",
+  "version": "1.0.0",
+  "description": "DBMS Music Playlist Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "dbms",
+    "sqlite",
+    "mysql",
+    "music-playlist",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "multer": "^2.3.0",
+    "sqlite3": "^5.1.7"
+  }
+}
