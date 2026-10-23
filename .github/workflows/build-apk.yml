@@ -24,6 +24,14 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
       - name: Grant Execute Permission to gradlew
         run: chmod +x android/gradlew
 
