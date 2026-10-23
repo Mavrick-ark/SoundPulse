@@ -32,10 +32,7 @@ jobs:
       - name: Install NPM Dependencies
         run: npm install
 
-      - name: Build Web Application
-        run: npm run build
-
-      - name: Sync Capacitor Android
+      - name: Sync Capacitor Android Assets
         run: npx cap sync android
 
       - name: Grant Execute Permission to gradlew
