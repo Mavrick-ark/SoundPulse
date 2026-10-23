@@ -11,7 +11,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 96,
     likes: 420,
     play_count: 8520,
-    cover_url: 'https://i.ytimg.com/vi/BddP6PYo2gs/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/9f/13/ca/9f13ca3b-e533-03e0-f19a-f0aaa774581d/196589311191.jpg/600x600bf-60.jpg',
     youtube_id: 'BddP6PYo2gs',
   },
   {
@@ -24,7 +24,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 171,
     likes: 980,
     play_count: 14200,
-    cover_url: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/6f/bc/e6/6fbce6c4-c38c-72d8-4fd0-66cfff32f679/20UMGIM12176.rgb.jpg/600x600bf-60.jpg',
     youtube_id: '4NRXx6U8ABQ',
   },
   {
@@ -37,7 +37,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 95,
     likes: 740,
     play_count: 11200,
-    cover_url: 'https://i.ytimg.com/vi/PT2_F-1esPk/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/41/f8/38/41f8380b-9b56-d5d4-31f7-a6411c0c9aaa/886446102054.jpg/600x600bf-60.jpg',
     youtube_id: 'PT2_F-1esPk',
   },
   {
@@ -50,7 +50,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 96,
     likes: 890,
     play_count: 13900,
-    cover_url: 'https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/15/e6/e8/15e6e8a4-4190-6a8b-86c3-ab4a51b88288/190295851286.jpg/600x600bf-60.jpg',
     youtube_id: 'JGwWNGJdvx8',
   },
   {
@@ -63,7 +63,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 90,
     likes: 610,
     play_count: 9840,
-    cover_url: 'https://i.ytimg.com/vi/u2NAus-W4SM/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/2e/0b/c0/2e0bc070-112f-a827-6ad8-6bc64f7caaff/840214460180.png/600x600bf-60.jpg',
     youtube_id: 'u2NAus-W4SM',
   },
   {
@@ -76,7 +76,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 186,
     likes: 870,
     play_count: 12450,
-    cover_url: 'https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/b5/92/bb/b592bb72-52e3-e756-9b26-9f56d08f47ab/16UMGIM67864.rgb.jpg/600x600bf-60.jpg',
     youtube_id: '34Na4j8AVgA',
   },
   {
@@ -89,7 +89,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 103,
     likes: 670,
     play_count: 9600,
-    cover_url: 'https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/6c/11/d6/6c11d681-aa3a-d59e-4c2e-f77e181026ab/190295092665.jpg/600x600bf-60.jpg',
     youtube_id: 'TUVcZfQe-Kw',
   },
   {
@@ -102,7 +102,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 170,
     likes: 790,
     play_count: 10800,
-    cover_url: 'https://i.ytimg.com/vi/kTJczUoc26U/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/89/59/6a/89596ab9-fa3c-8d08-4d95-a6450fa2013c/886449400515.jpg/600x600bf-60.jpg',
     youtube_id: 'kTJczUoc26U',
   },
   {
@@ -115,7 +115,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 103,
     likes: 820,
     play_count: 11900,
-    cover_url: 'https://i.ytimg.com/vi/FM7Z-Xq8Drc/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/9d/56/6f/9d566f55-5253-bed6-5c31-df952dae649d/886446379289.jpg/600x600bf-60.jpg',
     youtube_id: 'FM7Z-Xq8Drc',
   },
   {
@@ -128,7 +128,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 174,
     likes: 860,
     play_count: 13100,
-    cover_url: 'https://i.ytimg.com/vi/H5v3kku4y6Q/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/2a/19/fb/2a19fb85-2f70-9e44-f2a9-82abe679b88e/886449990061.jpg/600x600bf-60.jpg',
     youtube_id: 'H5v3kku4y6Q',
   },
   {
@@ -141,7 +141,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 125,
     likes: 910,
     play_count: 14500,
-    cover_url: 'https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/11/7a/b8/117ab805-6811-8929-18b9-0fad7baf0c25/17UMGIM98210.rgb.jpg/600x600bf-60.jpg',
     youtube_id: '7wtfhZwyrcc',
   },
   {
@@ -154,7 +154,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 90,
     likes: 930,
     play_count: 15300,
-    cover_url: 'https://i.ytimg.com/vi/60ItHLz5WEA/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/0d/a3/1a/0da31af7-d0ff-9bee-c427-1b6d0336f6fc/886446321981.jpg/600x600bf-60.jpg',
     youtube_id: '60ItHLz5WEA',
   },
   {
@@ -167,7 +167,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 120,
     likes: 850,
     play_count: 11700,
-    cover_url: 'https://i.ytimg.com/vi/syFZfO_wfMQ/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/62/2d/19/622d19da-eb88-022c-2bc5-d843657defe8/886444549851.jpg/600x600bf-60.jpg',
     youtube_id: 'syFZfO_wfMQ',
   },
   {
@@ -180,7 +180,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 101,
     likes: 720,
     play_count: 9100,
-    cover_url: 'https://i.ytimg.com/vi/GxldQ9GyXfY/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/64/d2/c5/64d2c511-67f4-ae09-5153-d39c3da413a3/21UMGIM75467.rgb.jpg/600x600bf-60.jpg',
     youtube_id: 'GxldQ9GyXfY',
   },
   {
@@ -193,7 +193,7 @@ export const CURATED_SONGS: Song[] = [
     bpm: 90,
     likes: 990,
     play_count: 16200,
-    cover_url: 'https://i.ytimg.com/vi/ApXoWvfEYVU/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/4b/30/2c/4b302cb6-7a14-5464-4e97-0577e9d0be49/18UMGIM82277.rgb.jpg/600x600bf-60.jpg',
     youtube_id: 'ApXoWvfEYVU',
   },
 ];
@@ -202,37 +202,37 @@ export const CURATED_ARTISTS: Artist[] = [
   {
     artist_id: 1,
     artist_name: 'Arijit Singh',
-    cover_url: 'https://i.ytimg.com/vi/BddP6PYo2gs/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/9f/13/ca/9f13ca3b-e533-03e0-f19a-f0aaa774581d/196589311191.jpg/600x600bf-60.jpg',
     total_songs: 2,
   },
   {
     artist_id: 2,
     artist_name: 'The Weeknd',
-    cover_url: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/6f/bc/e6/6fbce6c4-c38c-72d8-4fd0-66cfff32f679/20UMGIM12176.rgb.jpg/600x600bf-60.jpg',
     total_songs: 2,
   },
   {
     artist_id: 3,
     artist_name: 'The Chainsmokers',
-    cover_url: 'https://i.ytimg.com/vi/PT2_F-1esPk/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/41/f8/38/41f8380b-9b56-d5d4-31f7-a6411c0c9aaa/886446102054.jpg/600x600bf-60.jpg',
     total_songs: 2,
   },
   {
     artist_id: 4,
     artist_name: 'Ed Sheeran',
-    cover_url: 'https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/15/e6/e8/15e6e8a4-4190-6a8b-86c3-ab4a51b88288/190295851286.jpg/600x600bf-60.jpg',
     total_songs: 1,
   },
   {
     artist_id: 5,
     artist_name: 'Dua Lipa',
-    cover_url: 'https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/6c/11/d6/6c11d681-aa3a-d59e-4c2e-f77e181026ab/190295092665.jpg/600x600bf-60.jpg',
     total_songs: 1,
   },
   {
     artist_id: 6,
     artist_name: 'Imagine Dragons',
-    cover_url: 'https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/11/7a/b8/117ab805-6811-8929-18b9-0fad7baf0c25/17UMGIM98210.rgb.jpg/600x600bf-60.jpg',
     total_songs: 1,
   },
 ];
@@ -243,7 +243,7 @@ export const CURATED_ALBUMS: Album[] = [
     album_name: 'After Hours',
     artist_name: 'The Weeknd',
     release_year: 2020,
-    cover_url: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/6f/bc/e6/6fbce6c4-c38c-72d8-4fd0-66cfff32f679/20UMGIM12176.rgb.jpg/600x600bf-60.jpg',
     total_songs: 14,
   },
   {
@@ -251,7 +251,7 @@ export const CURATED_ALBUMS: Album[] = [
     album_name: '÷ (Divide)',
     artist_name: 'Ed Sheeran',
     release_year: 2017,
-    cover_url: 'https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/15/e6/e8/15e6e8a4-4190-6a8b-86c3-ab4a51b88288/190295851286.jpg/600x600bf-60.jpg',
     total_songs: 16,
   },
   {
@@ -259,7 +259,7 @@ export const CURATED_ALBUMS: Album[] = [
     album_name: 'Brahmastra',
     artist_name: 'Pritam & Arijit Singh',
     release_year: 2022,
-    cover_url: 'https://i.ytimg.com/vi/BddP6PYo2gs/hqdefault.jpg',
+    cover_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/9f/13/ca/9f13ca3b-e533-03e0-f19a-f0aaa774581d/196589311191.jpg/600x600bf-60.jpg',
     total_songs: 8,
   },
 ];
