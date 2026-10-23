@@ -212,8 +212,17 @@ export const GoogleConnectModal: React.FC = () => {
         </div>
 
         {/* Footer Note */}
-        <div className="mt-5 text-[11px] text-neutral-500">
-          Secure authentication using Google Identity Services
+        <div className="mt-5 text-[11px] text-neutral-500 space-y-1.5">
+          <div>Secure authentication using Google Identity Services</div>
+          <div className="flex items-center justify-center gap-3 text-neutral-400">
+            <a href="/privacy" target="_blank" className="hover:text-indigo-400 hover:underline">
+              Privacy Policy
+            </a>
+            <span>•</span>
+            <a href="/terms" target="_blank" className="hover:text-indigo-400 hover:underline">
+              Terms of Service
+            </a>
+          </div>
         </div>
       </div>
     </div>

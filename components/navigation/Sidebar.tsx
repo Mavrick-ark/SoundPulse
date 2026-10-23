@@ -161,6 +161,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ playlists }) => {
           </div>
           <span className={`w-2 h-2 rounded-full ${connectedAccount ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-600'}`} />
         </button>
+
+        <div className="mt-3 flex items-center justify-center gap-3 text-[10px] text-neutral-500">
+          <a href="/privacy" className="hover:text-neutral-300 transition-colors">Privacy</a>
+          <span>•</span>
+          <a href="/terms" className="hover:text-neutral-300 transition-colors">Terms</a>
+        </div>
       </div>
     </aside>
   );
