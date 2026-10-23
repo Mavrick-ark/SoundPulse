@@ -5,9 +5,19 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  
+  // Dynamically resolve redirect URI to match current environment (Vercel vs Localhost)
+  const configuredUri = process.env.GOOGLE_REDIRECT_URI?.trim();
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || req.nextUrl.host;
+  const proto = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+  const currentOrigin = `${proto}://${host}`;
+
   const redirectUri =
-    process.env.GOOGLE_REDIRECT_URI?.trim() ||
-    `${req.nextUrl.origin}/api/auth/google/callback`;
+    configuredUri && !configuredUri.includes('localhost')
+      ? configuredUri
+      : currentOrigin.includes('localhost')
+      ? configuredUri || `${currentOrigin}/api/auth/google/callback`
+      : `${currentOrigin}/api/auth/google/callback`;
 
   // Verify credentials configuration
   if (!clientId || clientId === 'your_google_client_id_here') {
