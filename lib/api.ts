@@ -1,4 +1,10 @@
 import { Song, Artist, Album, Playlist, SearchResults, SearchOptions } from '@/types/music';
+import {
+  CURATED_SONGS,
+  CURATED_ARTISTS,
+  CURATED_ALBUMS,
+  CURATED_PLAYLISTS,
+} from '@/lib/catalog';
 
 const API_BASE = '/api';
 
@@ -7,10 +13,10 @@ export async function fetchSongs(): Promise<Song[]> {
     const res = await fetch(`${API_BASE}/songs`);
     if (!res.ok) throw new Error('Failed to load songs');
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) && data.length > 0 ? data : CURATED_SONGS;
   } catch (error) {
-    console.error('Error fetching songs:', error);
-    return [];
+    console.warn('Backend unavailable, using rich curated music catalog');
+    return CURATED_SONGS;
   }
 }
 
@@ -19,10 +25,9 @@ export async function fetchArtists(): Promise<Artist[]> {
     const res = await fetch(`${API_BASE}/artists`);
     if (!res.ok) throw new Error('Failed to load artists');
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) && data.length > 0 ? data : CURATED_ARTISTS;
   } catch (error) {
-    console.error('Error fetching artists:', error);
-    return [];
+    return CURATED_ARTISTS;
   }
 }
 
@@ -31,10 +36,9 @@ export async function fetchAlbums(): Promise<Album[]> {
     const res = await fetch(`${API_BASE}/albums`);
     if (!res.ok) throw new Error('Failed to load albums');
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) && data.length > 0 ? data : CURATED_ALBUMS;
   } catch (error) {
-    console.error('Error fetching albums:', error);
-    return [];
+    return CURATED_ALBUMS;
   }
 }
 
@@ -43,14 +47,28 @@ export async function fetchPlaylists(): Promise<Playlist[]> {
     const res = await fetch(`${API_BASE}/playlists`);
     if (!res.ok) throw new Error('Failed to load playlists');
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data) && data.length > 0 ? data : CURATED_PLAYLISTS;
   } catch (error) {
-    console.error('Error fetching playlists:', error);
-    return [];
+    return CURATED_PLAYLISTS;
   }
 }
 
 export async function fetchPlaylistWithSongs(playlistId: number): Promise<{ playlist: Playlist; songs: Song[] } | null> {
+  // Check curated playlists first if offline or static ID
+  const curatedMatch = CURATED_PLAYLISTS.find((p) => p.playlist_id === playlistId);
+  if (curatedMatch) {
+    let pSongs = CURATED_SONGS;
+    if (playlistId === 102) {
+      pSongs = CURATED_SONGS.filter((s) => s.bpm && s.bpm < 115);
+    } else if (playlistId === 103) {
+      pSongs = CURATED_SONGS.filter((s) => s.bpm && s.bpm >= 120);
+    }
+    return {
+      playlist: curatedMatch,
+      songs: pSongs,
+    };
+  }
+
   try {
     const res = await fetch(`${API_BASE}/playlists/${playlistId}`);
     if (!res.ok) throw new Error('Failed to load playlist');
