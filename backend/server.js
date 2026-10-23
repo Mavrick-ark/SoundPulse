@@ -494,7 +494,7 @@ app.get("/api/playlists/:id", async (req, res) => {
         const songs = await dbAll(songsSql, [playlistId]);
         logSql(playlistSql + " | " + songsSql, [playlistId], Date.now() - startTime);
 
-        res.json({ ...playlist, songs });
+        res.json({ ...playlist, playlist, songs });
     } catch (err) {
         res.status(500).json({ error: "Failed to fetch playlist details", details: err.message });
     }

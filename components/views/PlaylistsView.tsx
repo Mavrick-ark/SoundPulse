@@ -75,9 +75,20 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
     }
   };
 
+  // Loading detail state
+  if (selectedPlaylistId && loadingDetail) {
+    return (
+      <div className="h-[50vh] flex flex-col items-center justify-center gap-3 text-neutral-400">
+        <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+        <span className="text-xs font-medium">Loading playlist...</span>
+      </div>
+    );
+  }
+
   // If viewing a single playlist detail
   if (selectedPlaylistId && playlistDetail) {
-    const { playlist, songs } = playlistDetail;
+    const playlist = playlistDetail.playlist || (playlistDetail as any) || {};
+    const songs = Array.isArray(playlistDetail.songs) ? playlistDetail.songs : [];
     const totalSecs = songs.reduce((acc, s) => acc + (s.duration || 0), 0);
 
     return (
@@ -101,7 +112,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
               Playlist
             </span>
             <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight truncate mt-1">
-              {playlist.title}
+              {playlist.title || 'Untitled Playlist'}
             </h1>
             <p className="text-xs sm:text-sm text-neutral-400 mt-2 line-clamp-2">
               {playlist.description || 'Curated SoundPulse collection.'}
@@ -194,6 +205,24 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({
               })}
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // If a playlist was clicked but couldn't be loaded
+  if (selectedPlaylistId && !playlistDetail) {
+    return (
+      <div className="space-y-6 pb-28">
+        <button
+          onClick={() => setSelectedPlaylistId(null)}
+          className="flex items-center gap-2 text-xs font-semibold text-neutral-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Playlists</span>
+        </button>
+        <div className="p-12 text-center text-neutral-400 text-xs rounded-2xl border border-white/5 bg-white/[0.02]">
+          Playlist details could not be loaded or the playlist is empty.
         </div>
       </div>
     );

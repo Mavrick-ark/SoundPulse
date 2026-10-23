@@ -54,7 +54,27 @@ export async function fetchPlaylistWithSongs(playlistId: number): Promise<{ play
   try {
     const res = await fetch(`${API_BASE}/playlists/${playlistId}`);
     if (!res.ok) throw new Error('Failed to load playlist');
-    return await res.json();
+    const data = await res.json();
+    if (!data) return null;
+
+    if (data.playlist && Array.isArray(data.songs)) {
+      return data;
+    }
+
+    const { songs = [], ...playlistProps } = data;
+    return {
+      playlist: {
+        playlist_id: playlistProps.playlist_id || playlistId,
+        title: playlistProps.title || 'Untitled Playlist',
+        description: playlistProps.description || '',
+        cover_color: playlistProps.cover_color,
+        creator_name: playlistProps.creator_name,
+        created_at: playlistProps.created_at,
+        total_songs: Array.isArray(songs) ? songs.length : (playlistProps.total_songs || 0),
+        total_duration: playlistProps.total_duration,
+      },
+      songs: Array.isArray(songs) ? songs : [],
+    };
   } catch (error) {
     console.error('Error fetching playlist details:', error);
     return null;
