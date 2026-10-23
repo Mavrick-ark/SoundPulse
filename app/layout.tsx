@@ -23,6 +23,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "SoundPulse — Premium Music & YouTube Client",
   description: "Next-gen lossless music player and YouTube Music client with liquid glass design, synchronized lyrics, and device audio import.",
+  manifest: "/manifest.json",
   icons: {
     icon: "/favicon.ico",
   },
