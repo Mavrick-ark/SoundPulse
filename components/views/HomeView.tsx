@@ -276,6 +276,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       src={song.cover_url}
                       alt=""
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (song.youtube_id && !target.src.includes('ytimg')) {
+                          target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
+                        } else {
+                          target.style.display = 'none';
+                        }
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-neutral-400">
@@ -358,6 +366,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         src={song.cover_url}
                         alt=""
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (song.youtube_id && !target.src.includes('ytimg')) {
+                            target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
+                          } else {
+                            target.style.display = 'none';
+                          }
+                        }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-neutral-500">
@@ -413,6 +429,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       src={song.cover_url}
                       alt=""
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (song.youtube_id && !target.src.includes('ytimg')) {
+                          target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
+                        } else {
+                          target.style.display = 'none';
+                        }
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-neutral-400">
@@ -505,6 +529,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           src={song.cover_url}
                           alt=""
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (song.youtube_id && !target.src.includes('ytimg')) {
+                              target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
+                            } else {
+                              target.style.display = 'none';
+                            }
+                          }}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-neutral-400">
@@ -638,6 +670,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         src={song.cover_url}
                         alt=""
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (song.youtube_id && !target.src.includes('ytimg')) {
+                            target.src = `https://i.ytimg.com/vi/${song.youtube_id}/hqdefault.jpg`;
+                          } else {
+                            target.style.display = 'none';
+                          }
+                        }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-neutral-400">
