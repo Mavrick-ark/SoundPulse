@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Play,
   Heart,
@@ -21,6 +21,7 @@ import {
   Flame,
   ArrowRight,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import { Song, Artist, Album } from '@/types/music';
 import { usePlayerStore } from '@/lib/store';
@@ -63,14 +64,79 @@ export const HomeView: React.FC<HomeViewProps> = ({
   );
   const [savingMixId, setSavingMixId] = useState<string | null>(null);
   const [savedMixIds, setSavedMixIds] = useState<string[]>([]);
+  const [liveRecommendations, setLiveRecommendations] = useState<{ song: Song; reason: string }[]>([]);
+  const [isRefreshingRecs, setIsRefreshingRecs] = useState<boolean>(false);
+  const [categoryTracks, setCategoryTracks] = useState<Record<string, Song[]>>({});
 
-  // Algorithmic recommendations engine
+  // Deterministic seed artist from user listening history or favorites
+  const seedArtist = useMemo(() => {
+    if (history[0]?.artist_name) return history[0].artist_name;
+    const favSong = songs.find((s) => favoriteIds.includes(s.song_id));
+    if (favSong?.artist_name) return favSong.artist_name;
+    return songs[0]?.artist_name || 'Arijit Singh';
+  }, [history, favoriteIds, songs]);
+
+  // Algorithmic recommendations engine (100% deterministic)
   const recData = useMemo(() => {
     return generateSmartRecommendations(songs, history, favoriteIds);
   }, [songs, history, favoriteIds]);
 
+  // Fetch genuine real-world recommendations from public music catalog
+  const loadLiveRecommendations = useCallback(async () => {
+    try {
+      setIsRefreshingRecs(true);
+      const res = await fetch(`/api/recommendations?artist=${encodeURIComponent(seedArtist)}&limit=12`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tracks && data.tracks.length > 0) {
+          setLiveRecommendations(
+            data.tracks.map((t: any) => ({
+              song: t,
+              reason: t.reason || `Because you listened to ${seedArtist}`,
+            }))
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('Live recommendations load warning:', e);
+    } finally {
+      setIsRefreshingRecs(false);
+    }
+  }, [seedArtist]);
+
+  // Dynamic mood picks for Quick Picks
+  useEffect(() => {
+    if (quickPickCategory === 'All') return;
+    if (categoryTracks[quickPickCategory]?.length) return;
+
+    fetch(`/api/recommendations?mood=${quickPickCategory.toLowerCase()}&limit=8`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.tracks && data.tracks.length > 0) {
+          setCategoryTracks((prev) => ({
+            ...prev,
+            [quickPickCategory]: data.tracks,
+          }));
+        }
+      })
+      .catch(() => {});
+  }, [quickPickCategory, categoryTracks]);
+
+  // Load live recommendations when seed artist changes
+  useEffect(() => {
+    loadLiveRecommendations();
+  }, [loadLiveRecommendations]);
+
   const activeQuickPicks =
-    recData.filteredQuickPicks[quickPickCategory] || recData.quickPicks;
+    categoryTracks[quickPickCategory] ||
+    recData.filteredQuickPicks[quickPickCategory] ||
+    recData.quickPicks;
+
+  const displayedRecommendations =
+    liveRecommendations.length > 0
+      ? liveRecommendations.slice(0, 9)
+      : recData.recommendedForYou.slice(0, 9);
+
   const trendingSongs = songs.slice(0, 12);
 
   const handleLike = (e: React.MouseEvent, songId: number) => {
@@ -406,11 +472,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
               Recommended For You
             </h2>
           </div>
-          <span className="text-xs text-neutral-400">Based on your activity</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => loadLiveRecommendations()}
+              disabled={isRefreshingRecs}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-indigo-300 hover:text-white transition-all disabled:opacity-50"
+              title="Discover fresh recommendations"
+            >
+              <RefreshCw className={`w-3 h-3 ${isRefreshingRecs ? 'animate-spin' : ''}`} />
+              <span>{isRefreshingRecs ? 'Finding...' : 'Discover'}</span>
+            </button>
+            <span className="text-xs text-neutral-400 hidden sm:inline">Based on your activity</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {recData.recommendedForYou.slice(0, 6).map(({ song, reason }) => {
+          {displayedRecommendations.map(({ song, reason }) => {
             const isCurrent = currentSong?.song_id === song.song_id;
             return (
               <div
@@ -418,7 +495,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 onClick={() =>
                   playSong(
                     song,
-                    recData.recommendedForYou.map((r) => r.song)
+                    displayedRecommendations.map((r) => r.song)
                   )
                 }
                 className="group flex items-center gap-3.5 p-3 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 hover:border-white/10 transition-all cursor-pointer"
@@ -452,8 +529,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <div className="text-xs sm:text-sm font-semibold text-white truncate group-hover:text-indigo-300 transition-colors">
                     {song.song_name}
                   </div>
-                  <div className="text-[11px] text-neutral-400 truncate mt-0.5">
-                    {song.artist_name}
+                  <div className="text-[11px] text-neutral-400 truncate mt-0.5 flex items-center gap-1.5">
+                    <span className="truncate">{song.artist_name}</span>
+                    {song.play_count ? (
+                      <>
+                        <span className="text-neutral-600">•</span>
+                        <span className="text-neutral-500 shrink-0">{formatPlayCount(song.play_count)}</span>
+                      </>
+                    ) : null}
                   </div>
                   <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-indigo-400 font-medium truncate">
                     <Sparkles className="w-2.5 h-2.5 shrink-0" />
