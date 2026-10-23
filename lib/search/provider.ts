@@ -7,6 +7,7 @@ import {
   SearchResults,
   SearchOptions,
 } from '@/types/music';
+import { proxiedFetch } from '@/lib/proxy';
 
 // Parse ISO 8601 duration (e.g., PT3M45S, PT1H2M10S, PT54S)
 export function parseYouTubeDuration(isoDuration?: string): number {
@@ -65,14 +66,14 @@ export async function searchYouTubeProvider(
     }
     searchUrl.searchParams.set('key', apiKey);
 
-    let searchRes = await fetch(searchUrl.toString());
+    let searchRes = await proxiedFetch(searchUrl.toString(), { timeoutMs: 7000 });
 
     // Fallback: If 0 results with category 10, try general search
     if (searchRes.ok) {
-      const data = await searchRes.json();
+      const data = (await searchRes.json()) as any;
       if (!data.items || data.items.length === 0) {
         searchUrl.searchParams.delete('videoCategoryId');
-        searchRes = await fetch(searchUrl.toString());
+        searchRes = await proxiedFetch(searchUrl.toString(), { timeoutMs: 7000 });
       }
     }
 
@@ -97,7 +98,7 @@ export async function searchYouTubeProvider(
     detailsUrl.searchParams.set('id', videoIds.join(','));
     detailsUrl.searchParams.set('key', apiKey);
 
-    const detailsRes = await fetch(detailsUrl.toString());
+    const detailsRes = await proxiedFetch(detailsUrl.toString(), { timeoutMs: 7000 });
     const detailsMap: Record<string, any> = {};
 
     if (detailsRes.ok) {
@@ -168,16 +169,16 @@ export async function searchITunesProvider(
     const limit = options.limit || 25;
     const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=${limit}`;
 
-    const res = await fetch(url, {
+    const res = await proxiedFetch(url, {
       headers: { 'User-Agent': 'SoundPulse/1.0' },
-      next: { revalidate: 300 }, // Cache 5 min
+      timeoutMs: 6000,
     });
 
     if (!res.ok) {
       return { tracks: [], artists: [], albums: [] };
     }
 
-    const data = await res.json();
+    const data = (await res.json()) as any;
     const results = data.results || [];
 
     const tracks: MusicTrack[] = [];
