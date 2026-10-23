@@ -40,7 +40,7 @@ jobs:
       - name: Build Android Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log || (echo "=== BUILD ERROR OUTPUT ===" && tail -n 80 build.log && exit 1)
 
       - name: Prepare APK Artifact
         run: |
