@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Build & Package Android APK
@@ -19,9 +22,7 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+          cache: 'gradle'
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -29,11 +30,13 @@ jobs:
           node-version: '20'
 
       - name: Install NPM Dependencies
-        run: npm ci || npm install
+        run: npm install
+
+      - name: Build Web Application
+        run: npm run build
 
       - name: Sync Capacitor Android
-        run: |
-          npx cap sync android
+        run: npx cap sync android
 
       - name: Grant Execute Permission to gradlew
         run: chmod +x android/gradlew
@@ -41,9 +44,9 @@ jobs:
       - name: Build Android Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Rename APK Artifact
+      - name: Prepare APK Artifact
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk ./SoundPulse-v1.0.0.apk
 
@@ -67,12 +70,12 @@ jobs:
             Download **`SoundPulse-v1.0.0.apk`** below and install it directly on your Android phone or tablet.
 
             ### Features:
-            - 🎶 100% Free Music Streaming
-            - 💎 Dark Glassmorphic Mobile UI
+            - 🎶 100% Free Music Discovery & Playback
+            - 💎 Dark Glassmorphic Modern UI
             - ⚡ Real Algorithmic Recommendations & Quick Picks
             - 🎙️ Synchronized Real-Time Lyrics
             - 🔒 Google Sign-In & YouTube Music Integration
-            - 📱 Standalone Full-Screen Android Application
+            - 📱 Continuous Background Audio Playback
           files: ./SoundPulse-v1.0.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
