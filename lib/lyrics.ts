@@ -41,3 +41,20 @@ export function formatTime(seconds: number): string {
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
+
+export function formatPlayCount(count?: number | null): string {
+  if (!count || count <= 0) return '—';
+  if (count >= 1_000_000_000) {
+    const val = (count / 1_000_000_000).toFixed(1);
+    return `${val.endsWith('.0') ? val.slice(0, -2) : val}B`;
+  }
+  if (count >= 1_000_000) {
+    const val = (count / 1_000_000).toFixed(1);
+    return `${val.endsWith('.0') ? val.slice(0, -2) : val}M`;
+  }
+  if (count >= 1_000) {
+    const val = (count / 1_000).toFixed(1);
+    return `${val.endsWith('.0') ? val.slice(0, -2) : val}K`;
+  }
+  return count.toLocaleString();
+}

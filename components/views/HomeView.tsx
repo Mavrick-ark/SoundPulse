@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Song, Artist, Album } from '@/types/music';
 import { usePlayerStore } from '@/lib/store';
-import { formatTime } from '@/lib/lyrics';
+import { formatTime, formatPlayCount } from '@/lib/lyrics';
 import { toggleSongLikeApi, createPlaylist, addSongToPlaylist } from '@/lib/api';
 import {
   generateSmartRecommendations,
@@ -558,8 +558,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     {song.album_name || 'SoundPulse Single'}
                   </div>
 
-                  <div className="col-span-3 sm:col-span-2 text-right text-neutral-400 tabular-nums">
-                    {(song.play_count || 1200 + idx * 85).toLocaleString()}
+                  <div
+                    className="col-span-3 sm:col-span-2 text-right text-neutral-400 tabular-nums font-medium"
+                    title={song.play_count ? `${song.play_count.toLocaleString()} plays` : undefined}
+                  >
+                    {formatPlayCount(song.play_count)}
                   </div>
 
                   <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-2 text-neutral-400 tabular-nums">

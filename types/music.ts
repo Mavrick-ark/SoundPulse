@@ -69,6 +69,7 @@ export interface MusicTrack {
   artist: string;
   album?: string;
   duration?: number; // In seconds
+  play_count?: number;
   artworkUrl?: string;
   source: MusicSource;
   sourceUrl?: string;

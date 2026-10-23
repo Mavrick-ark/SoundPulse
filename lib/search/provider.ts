@@ -92,9 +92,9 @@ export async function searchYouTubeProvider(
       return { tracks: [], videos: [] };
     }
 
-    // Step 2: Fetch detailed duration and snippet metadata via videos.list
+    // Step 2: Fetch detailed duration, snippet & statistics (views) metadata via videos.list
     const detailsUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
-    detailsUrl.searchParams.set('part', 'contentDetails,snippet');
+    detailsUrl.searchParams.set('part', 'contentDetails,snippet,statistics');
     detailsUrl.searchParams.set('id', videoIds.join(','));
     detailsUrl.searchParams.set('key', apiKey);
 
@@ -132,6 +132,7 @@ export async function searchYouTubeProvider(
         title: parsed.title,
         artist: parsed.artist || channel,
         duration: durationSeconds || 210,
+        play_count: details.statistics?.viewCount ? parseInt(details.statistics.viewCount, 10) : undefined,
         artworkUrl: thumbnail,
         source: 'youtube',
         sourceUrl: `https://www.youtube.com/watch?v=${vId}`,
