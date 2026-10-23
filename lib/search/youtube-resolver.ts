@@ -1,4 +1,5 @@
 import { proxiedFetch } from '@/lib/proxy';
+import { resolveOfficialYTMTrack } from '@/lib/ytmusic';
 
 // Healthy Invidious & Piped API mirrors for privacy-friendly, ban-resistant YouTube lookups
 const INVIDIOUS_INSTANCES = [
@@ -23,6 +24,17 @@ export async function resolveYouTubeVideoId(
   const cached = resolutionCache.get(normalizedKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.videoId;
+  }
+
+  // 2. PRIMARY: Query YouTube Music directly (WEB_REMIX client) for official song audio
+  try {
+    const ytmResult = await resolveOfficialYTMTrack(query);
+    if (ytmResult?.videoId) {
+      resolutionCache.set(normalizedKey, { videoId: ytmResult.videoId, timestamp: Date.now() });
+      return ytmResult.videoId;
+    }
+  } catch (err: any) {
+    console.warn('[Resolver] YouTube Music lookup fallback:', err.message);
   }
 
   // 2. Try official YouTube Data API v3 (if configured)

@@ -8,6 +8,7 @@ import {
   SearchOptions,
 } from '@/types/music';
 import { proxiedFetch } from '@/lib/proxy';
+import { searchYouTubeMusic } from '@/lib/ytmusic';
 
 // Parse ISO 8601 duration (e.g., PT3M45S, PT1H2M10S, PT54S)
 export function parseYouTubeDuration(isoDuration?: string): number {
@@ -304,8 +305,34 @@ export async function searchMusic(
   let errorMsg: string | undefined;
   let warningMsg: string | undefined;
 
-  // Search YouTube if requested or in 'all' mode
+  // 1. PRIMARY: Search YouTube Music catalog directly (Official tracks with 100% verified music IDs)
   if (provider === 'all' || provider === 'youtube') {
+    try {
+      const ytmTracks = await searchYouTubeMusic(cleanQuery, options.limit || 15);
+      if (ytmTracks.length > 0) {
+        for (const t of ytmTracks) {
+          tracks.push({
+            id: `ytm:${t.youtube_id}`,
+            title: t.song_name,
+            artist: t.artist_name,
+            album: t.album_name,
+            duration: t.duration,
+            artworkUrl: t.cover_url,
+            source: 'youtube',
+            sourceUrl: `https://music.youtube.com/watch?v=${t.youtube_id}`,
+            providerId: t.youtube_id,
+            isPlayable: true,
+            play_count: t.play_count,
+          });
+        }
+      }
+    } catch (e: any) {
+      console.warn('YouTube Music search provider fallback:', e.message);
+    }
+  }
+
+  // 2. Secondary fallback: Search YouTube Data API if YouTube key is present and YTM had 0 results
+  if ((provider === 'all' || provider === 'youtube') && tracks.length === 0) {
     if (hasYouTubeKey) {
       const ytRes = await searchYouTubeProvider(cleanQuery, apiKey, options);
       if (ytRes.error) {
@@ -317,10 +344,6 @@ export async function searchMusic(
       } else {
         tracks.push(...ytRes.tracks);
         videos.push(...ytRes.videos);
-      }
-    } else {
-      if (provider === 'youtube') {
-        warningMsg = 'YOUTUBE_API_KEY is not configured in .env.local. Configure a key from Google Cloud Console to enable direct YouTube Data API searches.';
       }
     }
   }

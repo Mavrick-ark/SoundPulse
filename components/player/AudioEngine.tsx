@@ -59,6 +59,10 @@ export const AudioEngine: React.FC = () => {
             disablekb: 1,
             fs: 0,
             rel: 0,
+            iv_load_policy: 3,
+            modestbranding: 1,
+            playsinline: 1,
+            enablejsapi: 1,
             origin: typeof window !== 'undefined' ? window.location.origin : '',
           },
           events: {
@@ -71,7 +75,19 @@ export const AudioEngine: React.FC = () => {
             onStateChange: (event: any) => {
               // 0 = ENDED (natural end of full-length video)
               if (event.data === 0) {
+                // Immediately stop video to block YouTube from autoplaying unrelated videos
+                try {
+                  ytPlayerRef.current?.stopVideo?.();
+                } catch (_) {}
                 nextSong();
+              } else if (event.data === 1) {
+                // If player is playing but app state says paused/stopped, halt unauthorized video autoplay
+                const playerState = usePlayerStore.getState();
+                if (!playerState.isPlaying) {
+                  try {
+                    ytPlayerRef.current?.stopVideo?.();
+                  } catch (_) {}
+                }
               }
             },
             onError: (err: any) => {
@@ -171,6 +187,9 @@ export const AudioEngine: React.FC = () => {
     // 3. Track does NOT have local audio or YouTube ID -> Resolve Full Track & Lyrics dynamically!
     if (!resolvingRef.current) {
       resolvingRef.current = true;
+      if (ytPlayerRef.current?.stopVideo) {
+        try { ytPlayerRef.current.stopVideo(); } catch (_) {}
+      }
       resolveTrackDetails(currentSong.song_name, currentSong.artist_name)
         .then((res) => {
           resolvingRef.current = false;
