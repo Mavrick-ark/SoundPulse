@@ -25,7 +25,7 @@ import { AccountModal } from '@/components/account/AccountModal';
 import { GoogleConnectModal } from '@/components/modals/GoogleConnectModal';
 
 export default function SoundPulsePage() {
-  const { activeTab, isLyricsOpen, setFavorites, setConnectedAccount } = usePlayerStore();
+  const { activeTab, isLyricsOpen, setFavorites, setHistory, setConnectedAccount } = usePlayerStore();
 
   const [songs, setSongs] = useState<Song[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
@@ -55,11 +55,18 @@ export default function SoundPulsePage() {
   useEffect(() => {
     loadData();
 
-    // Hydrate favorites from localStorage
+    // Hydrate favorites & history from localStorage
     try {
       const savedFavs = localStorage.getItem('soundpulse_favorites');
       if (savedFavs) {
         setFavorites(JSON.parse(savedFavs));
+      }
+    } catch (_) {}
+
+    try {
+      const savedHist = localStorage.getItem('soundpulse_recent_history');
+      if (savedHist) {
+        setHistory(JSON.parse(savedHist));
       }
     } catch (_) {}
 
@@ -114,7 +121,7 @@ export default function SoundPulsePage() {
             ) : (
               <>
                 {activeTab === 'home' && (
-                  <HomeView songs={songs} artists={artists} albums={albums} />
+                  <HomeView songs={songs} artists={artists} albums={albums} onRefreshPlaylists={loadData} />
                 )}
                 {activeTab === 'search' && <SearchView songs={songs} />}
                 {activeTab === 'library' && (

@@ -73,6 +73,8 @@ interface PlayerState {
   setSelectedPlaylistId: (id: number | null) => void;
   toggleFavorite: (songId: number) => void;
   setFavorites: (ids: number[]) => void;
+  setHistory: (history: Song[]) => void;
+  clearHistory: () => void;
   setCurrentTime: (time: number) => void;
   setDuration: (dur: number) => void;
 }
@@ -114,6 +116,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     const newHistory = [song, ...history.filter((s) => s.song_id !== song.song_id)].slice(0, 50);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('soundpulse_recent_history', JSON.stringify(newHistory));
+      } catch (_) {}
+    }
 
     set({
       currentSong: song,
@@ -290,6 +297,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }),
 
   setFavorites: (ids) => set({ favoriteIds: ids }),
+
+  setHistory: (hist) => set({ history: hist }),
+
+  clearHistory: () => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('soundpulse_recent_history');
+      } catch (_) {}
+    }
+    set({ history: [] });
+  },
 
   setCurrentTime: (time) => set({ currentTime: time }),
 
