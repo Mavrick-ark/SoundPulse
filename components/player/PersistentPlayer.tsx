@@ -76,11 +76,11 @@ export const PersistentPlayer: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-xs sm:text-sm font-semibold text-white truncate flex items-center gap-1.5">
-                <span>SoundPulse Player Ready</span>
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>Ready to Play</span>
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               </p>
               <p className="text-[10px] sm:text-xs text-neutral-400 truncate">
-                Tap any track to play with Samsung-style wave timeline
+                Select any song, album, or playlist to start listening
               </p>
             </div>
           </div>

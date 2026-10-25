@@ -11,15 +11,24 @@ declare global {
   }
 }
 
+// Silent 1-second WAV audio loop for mobile background playback keep-alive
+const SILENT_AUDIO_URI =
+  'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAAABmYWN0BAAAAAAAAABkYXRhAAAAAA==';
+
 export const AudioEngine: React.FC = () => {
   const {
     currentSong,
     isPlaying,
     currentTime,
+    duration,
     seekTarget,
     volume,
     isMuted,
     nextSong,
+    prevSong,
+    pause,
+    resume,
+    seekTo,
     setCurrentTime,
     setDuration,
     clearSeekTarget,
@@ -27,6 +36,7 @@ export const AudioEngine: React.FC = () => {
   } = usePlayerStore();
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const bgKeepAliveAudioRef = useRef<HTMLAudioElement | null>(null);
   const ytPlayerRef = useRef<any>(null);
   const isYtReadyRef = useRef<boolean>(false);
   const intervalRef = useRef<any>(null);
@@ -119,6 +129,112 @@ export const AudioEngine: React.FC = () => {
 
     clearSeekTarget();
   }, [seekTarget, currentSong, clearSeekTarget]);
+
+  // 1. Android & Web Notification Player: Register MediaSession Metadata (Title, Artist, Album, Artwork)
+  useEffect(() => {
+    if (!currentSong || typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+
+    try {
+      const art =
+        currentSong.cover_url ||
+        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&h=600&fit=crop';
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentSong.song_name,
+        artist: currentSong.artist_name,
+        album: currentSong.album_name || 'SoundPulse Music',
+        artwork: [
+          { src: art, sizes: '96x96', type: 'image/jpeg' },
+          { src: art, sizes: '128x128', type: 'image/jpeg' },
+          { src: art, sizes: '192x192', type: 'image/jpeg' },
+          { src: art, sizes: '256x256', type: 'image/jpeg' },
+          { src: art, sizes: '384x384', type: 'image/jpeg' },
+          { src: art, sizes: '512x512', type: 'image/jpeg' },
+        ],
+      });
+    } catch (err) {
+      console.warn('Could not update MediaSession metadata:', err);
+    }
+  }, [currentSong]);
+
+  // 2. Android Notification & Lock Screen Player Controls (Play, Pause, Skip, Seek)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+
+    const ms = navigator.mediaSession;
+
+    const setAction = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try {
+        ms.setActionHandler(action, handler);
+      } catch (_) {}
+    };
+
+    setAction('play', () => resume());
+    setAction('pause', () => pause());
+    setAction('previoustrack', () => prevSong());
+    setAction('nexttrack', () => nextSong());
+    setAction('stop', () => pause());
+
+    setAction('seekto', (details) => {
+      if (details.seekTime !== undefined && details.seekTime !== null) {
+        seekTo(details.seekTime);
+      }
+    });
+
+    setAction('seekbackward', (details) => {
+      const skip = details.seekOffset || 10;
+      seekTo(Math.max(0, currentTime - skip));
+    });
+
+    setAction('seekforward', (details) => {
+      const skip = details.seekOffset || 10;
+      const dur = usePlayerStore.getState().duration || 210;
+      seekTo(Math.min(dur, currentTime + skip));
+    });
+
+    return () => {
+      const allActions: MediaSessionAction[] = [
+        'play',
+        'pause',
+        'previoustrack',
+        'nexttrack',
+        'stop',
+        'seekto',
+        'seekbackward',
+        'seekforward',
+      ];
+      allActions.forEach((a) => setAction(a, null));
+    };
+  }, [resume, pause, prevSong, nextSong, seekTo, currentTime]);
+
+  // 3. Sync Notification Player Playback State (playing / paused)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    } catch (_) {}
+  }, [isPlaying]);
+
+  // 4. Sync Notification Timeline Position State
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      !('mediaSession' in navigator) ||
+      !('setPositionState' in navigator.mediaSession)
+    ) {
+      return;
+    }
+
+    if (duration > 0 && typeof currentTime === 'number' && !isNaN(currentTime)) {
+      try {
+        navigator.mediaSession.setPositionState({
+          duration: Math.max(1, duration),
+          playbackRate: 1,
+          position: Math.max(0, Math.min(currentTime, duration)),
+        });
+      } catch (_) {}
+    }
+  }, [currentTime, duration]);
 
   // Handle Song Change & Auto-Resolve Full Tracks and Lyrics
   useEffect(() => {
@@ -228,6 +344,15 @@ export const AudioEngine: React.FC = () => {
           currentSong.audio_url.startsWith('blob:') ||
           currentSong.audio_url.includes('127.0.0.1'))
     );
+
+    // Background Keep-Alive Audio: maintains active audio session in mobile OS when minimized
+    if (bgKeepAliveAudioRef.current) {
+      if (isPlaying) {
+        bgKeepAliveAudioRef.current.play().catch(() => {});
+      } else {
+        bgKeepAliveAudioRef.current.pause();
+      }
+    }
 
     if (isLocalTrack && audioRef.current) {
       if (isPlaying) {
@@ -351,6 +476,16 @@ export const AudioEngine: React.FC = () => {
           }
         }}
         preload="auto"
+      />
+
+      {/* Background Audio Keep-Alive Loop: keeps Android/iOS audio session active in background & lock screen */}
+      <audio
+        ref={bgKeepAliveAudioRef}
+        src={SILENT_AUDIO_URI}
+        loop
+        playsInline
+        preload="auto"
+        className="hidden pointer-events-none"
       />
 
       {/* Persistent YouTube Player Container for Full-Length YouTube Streaming */}

@@ -205,7 +205,7 @@ export const FullScreenPlayer: React.FC = () => {
 
       {/* Bottom Controls */}
       <div className="relative z-10 max-w-xl mx-auto w-full space-y-4">
-        {/* Samsung Undulating Wave Timeline Scrubber (Dynamic Poster Color) */}
+        {/* Multi-Strand Wave Timeline Scrubber (Dynamic Multi-Color Poster Palette) */}
         <div className="w-full px-1">
           <WaveScrubber
             currentTime={currentTime}

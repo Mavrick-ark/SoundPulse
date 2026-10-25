@@ -35,9 +35,11 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
   const [phase, setPhase] = useState(0);
   const animFrameRef = useRef<number | null>(null);
 
-  // Dynamically extract color from the song's poster/album art
+  // Dynamically extract multi-color palette from the song's poster/album art
   const extracted = usePosterColor(coverUrl, seedTitle);
   const primaryColor = customColor || extracted.primary;
+  const secondaryColor = extracted.secondary;
+  const accentColor = extracted.accent;
   const haloColor = extracted.halo;
   const glowColor = extracted.glow;
 
@@ -45,7 +47,17 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
   const activeTime = isDragging && dragTime !== null ? dragTime : currentTime;
   const progressRatio = Math.max(0, Math.min(1, activeTime / effectiveDuration));
 
-  // 60fps Continuous undulating wave animation while playing (Samsung One UI style)
+  // Unique SVG gradient and filter IDs to prevent DOM collision across players
+  const gradId = useMemo(
+    () => `multiGrad-${primaryColor.replace('#', '')}-${secondaryColor.replace('#', '')}`,
+    [primaryColor, secondaryColor]
+  );
+  const glowFilterId = useMemo(
+    () => `glowFilter-${primaryColor.replace('#', '')}`,
+    [primaryColor]
+  );
+
+  // 60fps Continuous undulating wave animation while playing
   useEffect(() => {
     let lastTime = performance.now();
 
@@ -54,7 +66,6 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
       lastTime = now;
 
       if (isPlaying) {
-        // Shift wave phase smoothly
         setPhase((prev) => (prev + delta * 3.8) % (Math.PI * 20));
       }
 
@@ -109,18 +120,18 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
 
   const viewBoxWidth = 600;
   const viewBoxHeight = height;
-  const baseY = viewBoxHeight - 10; // Baseline near bottom of SVG
+  const baseY = viewBoxHeight - 10;
   const currentX = progressRatio * viewBoxWidth;
 
-  // Generate the overlapping dancing waves matching Samsung One UI seekbar
+  // Generate multi-strand undulating wave paths
   const { wavePath1, wavePath2, wavePath3 } = useMemo(() => {
     if (currentX <= 4) {
       return { wavePath1: '', wavePath2: '', wavePath3: '' };
     }
 
     const maxAmp1 = isPlaying ? 9 : 4;
-    const maxAmp2 = isPlaying ? 6 : 2.5;
-    const maxAmp3 = isPlaying ? 4 : 1.5;
+    const maxAmp2 = isPlaying ? 6.5 : 2.5;
+    const maxAmp3 = isPlaying ? 4.5 : 1.5;
 
     let p1 = `M 0 ${baseY}`;
     let p2 = `M 0 ${baseY}`;
@@ -128,16 +139,15 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
 
     const step = 3;
     for (let x = 0; x <= currentX; x += step) {
-      // Bell envelope so wave rises from baseline at x=0 and lands back at currentX
       const t = x / currentX;
       const envelope = Math.sin(t * Math.PI);
 
       // Strand 1: Primary undulating crest
       const y1 = baseY - Math.abs(Math.sin(x * 0.038 - phase)) * maxAmp1 * envelope;
-      // Strand 2: Secondary offset wave ribbon
-      const y2 = baseY - Math.abs(Math.sin(x * 0.045 - phase - 1.4)) * maxAmp2 * envelope;
-      // Strand 3: Tertiary subtle wave
-      const y3 = baseY - Math.abs(Math.sin(x * 0.032 - phase - 2.8)) * maxAmp3 * envelope;
+      // Strand 2: Secondary offset wave ribbon (different frequency & phase)
+      const y2 = baseY - Math.abs(Math.sin(x * 0.046 - phase - 1.4)) * maxAmp2 * envelope;
+      // Strand 3: Tertiary accent wave ribbon
+      const y3 = baseY - Math.abs(Math.sin(x * 0.031 - phase - 2.8)) * maxAmp3 * envelope;
 
       p1 += ` L ${x.toFixed(1)} ${y1.toFixed(1)}`;
       p2 += ` L ${x.toFixed(1)} ${y2.toFixed(1)}`;
@@ -153,7 +163,7 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
 
   return (
     <div className={`w-full select-none ${className}`}>
-      {/* Interactive Wave Scrubber SVG */}
+      {/* Interactive Wave Scrubber Container */}
       <div
         ref={containerRef}
         onPointerDown={handlePointerDown}
@@ -164,14 +174,22 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
         style={{ height: `${height}px` }}
         title="Seek position"
       >
+        {/* SVG Waves and Track */}
         <svg
           viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
           preserveAspectRatio="none"
-          className="w-full h-full overflow-visible"
+          className="w-full h-full overflow-visible pointer-events-none"
         >
           <defs>
-            {/* Dynamic Poster Glow filter */}
-            <filter id={`posterGlow-${primaryColor.replace('#', '')}`} x="-20%" y="-50%" width="140%" height="200%">
+            {/* Multi-Color Gradient for Played Track */}
+            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={primaryColor} />
+              <stop offset="55%" stopColor={secondaryColor} />
+              <stop offset="100%" stopColor={accentColor} />
+            </linearGradient>
+
+            {/* Poster Glow filter */}
+            <filter id={glowFilterId} x="-20%" y="-50%" width="140%" height="200%">
               <feGaussianBlur stdDeviation="3" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
@@ -180,7 +198,7 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
             </filter>
           </defs>
 
-          {/* 1. Background Unplayed Rail (Straight subtle track) */}
+          {/* 1. Background Unplayed Rail (Clean translucent track) */}
           <line
             x1="0"
             y1={baseY}
@@ -191,95 +209,93 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
             strokeLinecap="round"
           />
 
-          {/* 2. Played Base Rail (Solid colored line up to currentX) */}
+          {/* 2. Played Base Rail with Multi-Color Gradient */}
           {currentX > 0 && (
             <line
               x1="0"
               y1={baseY}
               x2={currentX}
               y2={baseY}
-              stroke={primaryColor}
+              stroke={`url(#${gradId})`}
               strokeWidth="4"
               strokeLinecap="round"
             />
           )}
 
-          {/* 3. Samsung Dancing Wave Strands (Rising above baseline) */}
+          {/* 3. Multi-Color Dancing Wave Strands */}
           {currentX > 4 && (
             <>
-              {/* Strand 3 (Soft background ribbon) */}
+              {/* Strand 3: Accent Color (Luminous subtle ribbon) */}
               <path
                 d={wavePath3}
                 fill="none"
-                stroke={primaryColor}
-                strokeWidth="1.5"
-                strokeOpacity="0.4"
+                stroke={accentColor}
+                strokeWidth="1.6"
+                strokeOpacity="0.5"
                 strokeLinecap="round"
               />
-              {/* Strand 2 (Middle ribbon) */}
+              {/* Strand 2: Secondary Color (Rich middle ribbon) */}
               <path
                 d={wavePath2}
                 fill="none"
-                stroke={primaryColor}
-                strokeWidth="1.8"
-                strokeOpacity="0.65"
+                stroke={secondaryColor}
+                strokeWidth="2.0"
+                strokeOpacity="0.75"
                 strokeLinecap="round"
               />
-              {/* Strand 1 (Primary crest ribbon with glow) */}
+              {/* Strand 1: Primary Color (Dominant crest ribbon with glow) */}
               <path
                 d={wavePath1}
                 fill="none"
                 stroke={primaryColor}
-                strokeWidth="2.2"
-                strokeOpacity="0.9"
+                strokeWidth="2.4"
+                strokeOpacity="0.95"
                 strokeLinecap="round"
-                filter={`url(#posterGlow-${primaryColor.replace('#', '')})`}
+                filter={`url(#${glowFilterId})`}
               />
             </>
           )}
-
-          {/* 4. Playhead Thumb (Outer translucent halo + Inner solid dot like Samsung screenshot) */}
-          <g transform={`translate(${currentX}, ${baseY})`}>
-            {/* Outer Translucent Halo Ring */}
-            <circle
-              cx="0"
-              cy="0"
-              r={isDragging ? 12 : 9.5}
-              fill={haloColor}
-              className="transition-all duration-150"
-            />
-            {/* Inner Solid Playhead Dot */}
-            <circle
-              cx="0"
-              cy="0"
-              r={isDragging ? 6.5 : 5}
-              fill={primaryColor}
-              className="transition-all duration-150 drop-shadow-[0_0_6px_rgba(0,0,0,0.5)]"
-            />
-          </g>
         </svg>
 
-        {/* Hover / Drag Floating Time Tooltip */}
-        {isDragging && dragTime !== null && (
+        {/* 4. Google Material 3 Playhead Dot (Rendered in HTML to GUARANTEE 100% perfect circularity, never oval) */}
+        <div
+          className="absolute top-0 bottom-0 pointer-events-none transition-transform duration-75 flex items-center justify-center z-20"
+          style={{
+            left: `${progressRatio * 100}%`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          {/* Outer Translucent Halo Ring (Google-style smooth circular halo) */}
           <div
-            className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-neutral-900 border border-white/20 text-[10px] font-mono text-white shadow-xl pointer-events-none"
-            style={{ left: `${progressRatio * 100}%` }}
-          >
-            {formatTime(dragTime)}
-          </div>
-        )}
+            className="absolute rounded-full transition-all duration-150"
+            style={{
+              width: isDragging ? '28px' : '22px',
+              height: isDragging ? '28px' : '22px',
+              backgroundColor: haloColor,
+              opacity: isDragging ? 0.9 : 0.45,
+            }}
+          />
+
+          {/* Inner Crisp Solid Google Dot (100% Mathematically Circular) */}
+          <div
+            className="relative rounded-full bg-white transition-all duration-150"
+            style={{
+              width: isDragging ? '14px' : '11px',
+              height: isDragging ? '14px' : '11px',
+              border: `2.5px solid ${primaryColor}`,
+              boxShadow: `0 0 10px ${glowColor}, 0 2px 6px rgba(0,0,0,0.45)`,
+            }}
+          />
+        </div>
       </div>
 
       {/* Timestamps */}
       {showTimestamps && (
-        <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400 mt-0.5 px-0.5">
-          <span
-            className="tabular-nums font-semibold transition-colors"
-            style={{ color: primaryColor }}
-          >
+        <div className="flex justify-between items-center text-[11px] font-medium text-neutral-400 mt-1 px-0.5 tracking-tight">
+          <span className="tabular-nums font-mono">
             {formatTime(activeTime)}
           </span>
-          <span className="tabular-nums text-neutral-500">
+          <span className="tabular-nums font-mono text-neutral-500">
             {formatTime(effectiveDuration)}
           </span>
         </div>
