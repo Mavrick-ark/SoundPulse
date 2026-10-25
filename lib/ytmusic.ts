@@ -1,5 +1,6 @@
 import { Song } from '@/types/music';
 import { proxiedFetch } from '@/lib/proxy';
+import { generateSapisidHash } from '@/lib/ytmusic-auth';
 
 export interface YTMTrack {
   song_id: number;
@@ -225,4 +226,284 @@ export async function getYouTubeMusicRecommendations(
     reason,
     category: mood ? mood.toUpperCase() : 'RECOMMENDED',
   }));
+}
+
+export function parseDurationString(str?: string): number {
+  if (!str) return 210;
+  const parts = str.split(':').map((p) => parseInt(p.trim(), 10));
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return parts[0] * 60 + parts[1];
+  }
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  return 210;
+}
+
+export interface YTMShelf {
+  title: string;
+  subtitle?: string;
+  tracks: YTMTrack[];
+}
+
+/**
+ * Pure YouTube Music Radio queue implementation matching LastWave-Native's PureRadioQueue.
+ * Queries /youtubei/v1/next with the RDAMVM playlist to retrieve YouTube Music's authentic automix radio.
+ */
+export async function getYouTubeMusicRadioQueue(
+  seedVideoId: string,
+  options?: {
+    existingVideoIds?: string[];
+    limit?: number;
+    cookies?: string;
+  }
+): Promise<YTMTrack[]> {
+  if (!seedVideoId) return [];
+
+  const limit = options?.limit || 25;
+  const existingSet = new Set<string>(options?.existingVideoIds || []);
+  existingSet.add(seedVideoId);
+
+  const postBody = {
+    context: {
+      client: {
+        clientName: 'WEB_REMIX',
+        clientVersion: '1.20240101.01.00',
+        hl: 'en',
+        gl: 'US',
+      },
+    },
+    videoId: seedVideoId,
+    playlistId: `RDAMVM${seedVideoId}`,
+    isAudioOnly: true,
+  };
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  };
+
+  if (options?.cookies) {
+    const authHeader = generateSapisidHash(options.cookies);
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+      headers['Cookie'] = options.cookies;
+      headers['X-Origin'] = 'https://music.youtube.com';
+    }
+  }
+
+  try {
+    const res = await proxiedFetch('https://music.youtube.com/youtubei/v1/next', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(postBody),
+      timeoutMs: 9000,
+      maxRetries: 1,
+    });
+
+    if (!res.ok) {
+      console.warn('[YTM Radio] next endpoint failed with status:', res.status);
+      return [];
+    }
+
+    const data = (await res.json()) as any;
+    const contents =
+      data?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer
+        ?.watchNextTabbedResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+        ?.musicQueueRenderer?.content?.playlistPanelRenderer?.contents || [];
+
+    const tracks: YTMTrack[] = [];
+    const seenBatch = new Set<string>();
+
+    for (const item of contents) {
+      const r = item?.playlistPanelVideoRenderer;
+      if (!r || !r.videoId) continue;
+
+      const videoId = r.videoId;
+      if (existingSet.has(videoId) || seenBatch.has(videoId)) continue;
+      seenBatch.add(videoId);
+
+      const title = r.title?.runs?.[0]?.text?.trim() || 'Unknown Track';
+      const bylineFull =
+        r.longBylineText?.runs?.map((x: any) => x.text).join('') || '';
+      // Artist is typically before the first bullet " • "
+      const artist = bylineFull.split('•')[0]?.trim() || 'YouTube Music';
+      const lengthStr = r.lengthText?.runs?.[0]?.text;
+      const duration = parseDurationString(lengthStr);
+
+      const thumbs = r.thumbnail?.thumbnails || [];
+      const rawThumb = thumbs[thumbs.length - 1]?.url;
+      const coverUrl = upgradeYTMThumbnail(rawThumb);
+
+      let numId = 0;
+      for (let i = 0; i < videoId.length; i++) {
+        numId = (numId * 31 + videoId.charCodeAt(i)) % 2147483647;
+      }
+
+      tracks.push({
+        song_id: Math.abs(numId),
+        song_name: title,
+        artist_name: artist,
+        album_name: 'YouTube Music Radio',
+        duration,
+        likes: Math.min(9999, Math.round(duration * 25) + 300),
+        play_count: 5000000,
+        cover_url: coverUrl,
+        youtube_id: videoId,
+        reason: 'YouTube Music Automix Radio',
+        category: 'RADIO',
+      });
+
+      if (tracks.length >= limit) break;
+    }
+
+    return tracks;
+  } catch (err: any) {
+    console.error('[YTM Radio] Error fetching queue:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Fetches real YouTube Music Home sections ('Quick picks', 'Trending', etc.).
+ * If user cookies are supplied, returns personalized shelves ('Listen again', 'Mixed for you').
+ */
+export async function getYouTubeMusicHomeShelves(cookies?: string): Promise<YTMShelf[]> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  };
+
+  if (cookies) {
+    const authHeader = generateSapisidHash(cookies);
+    if (authHeader) {
+      headers['Authorization'] = authHeader;
+      headers['Cookie'] = cookies;
+      headers['X-Origin'] = 'https://music.youtube.com';
+    }
+  }
+
+  try {
+    const res = await proxiedFetch('https://music.youtube.com/youtubei/v1/browse', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20240101.01.00',
+            hl: 'en',
+            gl: 'US',
+          },
+        },
+        browseId: 'FEmusic_home',
+      }),
+      timeoutMs: 9000,
+    });
+
+    if (!res.ok) {
+      return [];
+    }
+
+    const data = (await res.json()) as any;
+    const tabs = data?.contents?.singleColumnBrowseResultsRenderer?.tabs || [];
+    const sections =
+      tabs[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
+
+    const shelves: YTMShelf[] = [];
+
+    for (const section of sections) {
+      const shelf =
+        section?.musicCarouselShelfRenderer ||
+        section?.musicImmersiveCarouselShelfRenderer;
+      if (!shelf) continue;
+
+      const title =
+        shelf?.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs
+          ?.map((r: any) => r.text)
+          .join('') || 'Featured on YouTube Music';
+      const subtitle =
+        shelf?.header?.musicCarouselShelfBasicHeaderRenderer?.strapline?.runs
+          ?.map((r: any) => r.text)
+          .join('') || undefined;
+
+      const contents = shelf?.contents || [];
+      const tracks: YTMTrack[] = [];
+
+      for (const item of contents) {
+        const r =
+          item?.musicResponsiveListItemRenderer || item?.musicTwoRowItemRenderer;
+        if (!r) continue;
+
+        const videoId =
+          r?.playlistItemData?.videoId ||
+          r?.overlay?.musicItemThumbnailOverlayRenderer?.content
+            ?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint
+            ?.videoId ||
+          r?.navigationEndpoint?.watchEndpoint?.videoId;
+
+        if (!videoId) continue;
+
+        let songName = '';
+        let artist = 'YouTube Music';
+
+        if (r.flexColumns) {
+          songName =
+            r.flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text
+              ?.runs?.[0]?.text?.trim() || '';
+          artist =
+            r.flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text
+              ?.runs?.[0]?.text?.trim() || 'YouTube Music';
+        } else if (r.title) {
+          songName = r.title?.runs?.[0]?.text?.trim() || '';
+          artist = r.subtitle?.runs?.[0]?.text?.trim() || 'YouTube Music';
+        }
+
+        if (!songName) continue;
+
+        const thumbs =
+          r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ||
+          r.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails ||
+          [];
+        const rawThumb = thumbs[thumbs.length - 1]?.url;
+        const coverUrl = upgradeYTMThumbnail(rawThumb);
+
+        let numId = 0;
+        for (let i = 0; i < videoId.length; i++) {
+          numId = (numId * 31 + videoId.charCodeAt(i)) % 2147483647;
+        }
+
+        tracks.push({
+          song_id: Math.abs(numId),
+          song_name: songName,
+          artist_name: artist,
+          album_name: title,
+          duration: 210,
+          likes: 850,
+          play_count: 5000000,
+          cover_url: coverUrl,
+          youtube_id: videoId,
+          reason: title,
+          category: 'HOME',
+        });
+
+        if (tracks.length >= 10) break;
+      }
+
+      if (tracks.length > 0) {
+        shelves.push({
+          title,
+          subtitle,
+          tracks,
+        });
+      }
+    }
+
+    return shelves;
+  } catch (err: any) {
+    console.warn('[YTM Home] Error fetching home shelves:', err.message);
+    return [];
+  }
 }

@@ -67,6 +67,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [liveRecommendations, setLiveRecommendations] = useState<{ song: Song; reason: string }[]>([]);
   const [isRefreshingRecs, setIsRefreshingRecs] = useState<boolean>(false);
   const [categoryTracks, setCategoryTracks] = useState<Record<string, Song[]>>({});
+  const [ytmShelves, setYtmShelves] = useState<Array<{ title: string; subtitle?: string; tracks: Song[] }>>([]);
 
   // Deterministic seed artist from user listening history or favorites
   const seedArtist = useMemo(() => {
@@ -85,9 +86,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const loadLiveRecommendations = useCallback(async () => {
     try {
       setIsRefreshingRecs(true);
-      const res = await fetch(`/api/recommendations?artist=${encodeURIComponent(seedArtist)}&limit=12`);
-      if (res.ok) {
-        const data = await res.json();
+      const [recsRes, homeRes] = await Promise.all([
+        fetch(`/api/recommendations?artist=${encodeURIComponent(seedArtist)}&limit=12`),
+        fetch(`/api/ytmusic/home`).catch(() => null),
+      ]);
+
+      if (recsRes.ok) {
+        const data = await recsRes.json();
         if (data.tracks && data.tracks.length > 0) {
           setLiveRecommendations(
             data.tracks.map((t: any) => ({
@@ -95,6 +100,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
               reason: t.reason || `Because you listened to ${seedArtist}`,
             }))
           );
+        }
+      }
+
+      if (homeRes && homeRes.ok) {
+        const homeData = await homeRes.json();
+        if (homeData.shelves && homeData.shelves.length > 0) {
+          setYtmShelves(homeData.shelves);
         }
       }
     } catch (e) {
@@ -563,6 +575,65 @@ export const HomeView: React.FC<HomeViewProps> = ({
           })}
         </div>
       </section>
+
+      {/* 5b. YouTube Music Curated Shelves (Ported from LastWave-Native HomeShelf) */}
+      {ytmShelves.length > 0 &&
+        ytmShelves.map((shelf, sIdx) => (
+          <section key={`ytm-shelf-${sIdx}`} className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Radio className="w-5 h-5 text-pink-500" />
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                    {shelf.title}
+                  </h2>
+                  {shelf.subtitle && (
+                    <p className="text-xs text-neutral-400 mt-0.5">{shelf.subtitle}</p>
+                  )}
+                </div>
+              </div>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-400">
+                YouTube Music
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+              {shelf.tracks.slice(0, 10).map((track) => (
+                <div
+                  key={`shelf-track-${track.song_id}-${track.youtube_id}`}
+                  onClick={() => playSong(track, shelf.tracks)}
+                  className="group p-3 rounded-2xl bg-white/[0.02] hover:bg-white/[0.07] border border-white/5 hover:border-white/10 transition-all cursor-pointer flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-neutral-800 mb-2.5 shadow-md">
+                      {track.cover_url ? (
+                        <img
+                          src={track.cover_url}
+                          alt=""
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-500">
+                          <Disc3 className="w-8 h-8" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Play className="w-6 h-6 text-white fill-current ml-0.5" />
+                      </div>
+                    </div>
+
+                    <div className="text-xs sm:text-sm font-semibold text-white truncate group-hover:text-pink-400 transition-colors">
+                      {track.song_name}
+                    </div>
+                    <div className="text-[11px] text-neutral-400 truncate mt-0.5">
+                      {track.artist_name}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
 
       {/* 6. Trending Tracks Table */}
       <section className="space-y-4">

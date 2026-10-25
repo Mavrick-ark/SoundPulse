@@ -15,14 +15,18 @@ export interface OAuthUser {
   avatarUrl?: string;
   channelId?: string;
   channelTitle?: string;
+  handle?: string;
+  authType?: 'google_oauth' | 'ytmusic_cookie';
 }
 
 export interface StoredSession {
-  accessToken: string;
+  accessToken?: string;
   refreshToken?: string;
-  expiresAt: number; // unix timestamp in ms
+  expiresAt?: number; // unix timestamp in ms
   user: OAuthUser;
   lastSyncedAt?: string;
+  ytmCookies?: string;
+  authType?: 'google_oauth' | 'ytmusic_cookie';
 }
 
 // Encrypt payload using AES-256-GCM
@@ -112,9 +116,11 @@ export async function clearUserSession(): Promise<void> {
 
 // Refresh Google access token if expired
 export async function getValidAccessToken(session: StoredSession): Promise<string | null> {
+  if (!session.accessToken) return null;
   const now = Date.now();
+  const expiresAt = session.expiresAt || 0;
   // If token is still valid with 2 minutes buffer, return it
-  if (session.expiresAt > now + 120 * 1000) {
+  if (expiresAt > now + 120 * 1000) {
     return session.accessToken;
   }
 

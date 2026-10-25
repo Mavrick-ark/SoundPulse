@@ -20,6 +20,9 @@ import {
   Lock,
   ArrowUpRight,
   Info,
+  Key,
+  Clipboard,
+  Check,
 } from 'lucide-react';
 import { usePlayerStore } from '@/lib/store';
 import { createPlaylist } from '@/lib/api';
@@ -57,7 +60,14 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [showConfigGuide, setShowConfigGuide] = useState(false);
 
-  // Playlists fetched via supported YouTube Data API
+  // Cookie Login Dialog State (LastWave-Native style)
+  const [showCookieModal, setShowCookieModal] = useState(false);
+  const [cookieInput, setCookieInput] = useState('');
+  const [isVerifyingCookie, setIsVerifyingCookie] = useState(false);
+  const [cookieModalError, setCookieModalError] = useState<string | null>(null);
+  const [pastedClipboardSuccess, setPastedClipboardSuccess] = useState(false);
+
+  // Playlists fetched via supported YouTube Data API or InnerTube
   const [userPlaylists, setUserPlaylists] = useState<YouTubePlaylist[]>([]);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
   const [importingPlaylistId, setImportingPlaylistId] = useState<string | null>(null);
@@ -100,11 +110,13 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
       .then((data) => {
         setIsConfigured(data.isConfigured);
         if (data.authenticated && data.user) {
+          const isCookieAuth = data.user.authType === 'ytmusic_cookie';
           setConnectedAccount({
             connected: true,
-            name: data.user.name || data.user.channelTitle || 'Google User',
-            email: data.user.email,
-            provider: 'google',
+            name: data.user.name || data.user.channelTitle || 'YouTube Music User',
+            email: data.user.email || data.user.handle || (isCookieAuth ? 'InnerTube Session' : 'Google Account'),
+            handle: data.user.handle,
+            provider: isCookieAuth ? 'ytmusic_cookie' : 'google',
             avatarUrl: data.user.avatarUrl,
             connectedAt: new Date().toISOString(),
           });
@@ -201,6 +213,60 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch {
       setErrorMsg('Failed to log out cleanly.');
+    }
+  };
+
+  // Direct YouTube Music Cookie Login (modeled after LastWave-Native CookieLoginDialog)
+  const handleConnectCookie = async () => {
+    if (!cookieInput.trim()) {
+      setCookieModalError('Please enter cookie text.');
+      return;
+    }
+    setIsVerifyingCookie(true);
+    setCookieModalError(null);
+    try {
+      const res = await fetch('/api/auth/ytmusic/cookie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies: cookieInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to authenticate YouTube Music cookies.');
+      }
+
+      setConnectedAccount({
+        connected: true,
+        name: data.user.name,
+        handle: data.user.handle,
+        email: data.user.handle || 'YouTube Music Session',
+        provider: 'ytmusic_cookie',
+        avatarUrl: data.user.avatarUrl,
+        connectedAt: new Date().toISOString(),
+      });
+      setSuccessMsg(`Connected successfully as ${data.user.name}!`);
+      setShowCookieModal(false);
+      setCookieInput('');
+      fetchAccessiblePlaylists();
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setCookieModalError(err.message || 'Verification failed. Make sure SAPISID is present.');
+    } finally {
+      setIsVerifyingCookie(false);
+    }
+  };
+
+  const handlePasteClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        setCookieInput(text.trim());
+        setCookieModalError(null);
+        setPastedClipboardSuccess(true);
+        setTimeout(() => setPastedClipboardSuccess(false), 2000);
+      }
+    } catch {
+      setCookieModalError('Unable to access clipboard. Please paste manually into the text box.');
     }
   };
 
@@ -454,10 +520,12 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                 <div className="text-xs text-neutral-400 truncate">
                   {connectedAccount ? (
                     <span className="text-emerald-400 font-medium">
-                      Verified YouTube &amp; Google Account • {connectedAccount.email}
+                      {connectedAccount.provider === 'ytmusic_cookie'
+                        ? `YouTube Music InnerTube Session • ${connectedAccount.handle || connectedAccount.name}`
+                        : `Verified Google & YouTube Account • ${connectedAccount.email}`}
                     </span>
                   ) : (
-                    'Guest Session • Connect via supported OAuth 2.0 flow'
+                    'Guest Session • Connect via Cookie Login or Google OAuth'
                   )}
                 </div>
               </div>
@@ -473,18 +541,28 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                   <span>Disconnect</span>
                 </button>
               ) : (
-                <button
-                  onClick={handleConnectGoogle}
-                  disabled={isAuthorizing}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-black text-xs font-semibold hover:scale-105 active:scale-95 transition-all shadow-md shadow-white/10 disabled:opacity-50"
-                >
-                  {isAuthorizing ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-neutral-800" />
-                  ) : (
-                    <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-                  )}
-                  <span>Authorize YouTube Account</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCookieModal(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold hover:scale-105 active:scale-95 transition-all shadow-md shadow-indigo-600/10"
+                    title="Connect using YouTube Music session cookies (like LastWave-Native)"
+                  >
+                    <Key className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Cookie Login</span>
+                  </button>
+                  <button
+                    onClick={handleConnectGoogle}
+                    disabled={isAuthorizing}
+                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white text-black text-xs font-semibold hover:scale-105 active:scale-95 transition-all shadow-md shadow-white/10 disabled:opacity-50"
+                  >
+                    {isAuthorizing ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-neutral-800" />
+                    ) : (
+                      <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    )}
+                    <span>Google OAuth</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -638,6 +716,136 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
           )}
         </div>
       </div>
+
+      {/* Cookie Login Modal Overlay (Ported directly from LastWave-Native CookieLoginDialog) */}
+      {showCookieModal && (
+        <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="relative w-full max-w-lg bg-[#121420] border border-white/15 rounded-3xl shadow-2xl p-6 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-md">
+                  <Key className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm sm:text-base font-bold text-white">
+                    YouTube Music Cookie Login
+                  </h4>
+                  <p className="text-[11px] text-neutral-400">
+                    Direct InnerTube session authorization (SAPISID)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isVerifyingCookie) {
+                    setShowCookieModal(false);
+                    setCookieModalError(null);
+                  }
+                }}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Instructions */}
+            <div className="text-xs text-neutral-300 space-y-1.5 leading-relaxed bg-white/[0.03] p-3 rounded-2xl border border-white/5">
+              <p className="font-semibold text-white">How to connect with session cookies:</p>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] text-neutral-300">
+                <li>Sign in to <span className="text-indigo-300 font-mono">music.youtube.com</span> in your browser</li>
+                <li>Open DevTools (<kbd className="px-1 py-0.5 rounded bg-black/40 text-[10px] font-mono border border-white/10">F12</kbd>) &rarr; Application &rarr; Cookies</li>
+                <li>Or copy from a browser extension (<span className="text-neutral-200">Cookie-Editor</span> or <span className="text-neutral-200">Get cookies.txt</span>)</li>
+                <li>Paste the raw Cookie header, JSON, or cookies.txt below</li>
+              </ol>
+            </div>
+
+            {/* Input */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-medium text-neutral-300">
+                  Cookie text, JSON, or header
+                </label>
+                <button
+                  type="button"
+                  onClick={handlePasteClipboard}
+                  disabled={isVerifyingCookie}
+                  className="flex items-center gap-1 text-[11px] font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  {pastedClipboardSuccess ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400">Pasted!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Clipboard className="w-3.5 h-3.5" />
+                      <span>Paste from Clipboard</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <textarea
+                value={cookieInput}
+                onChange={(e) => {
+                  setCookieInput(e.target.value);
+                  if (cookieModalError) setCookieModalError(null);
+                }}
+                placeholder="Paste Cookie header: SAPISID=...; __Secure-3PAPISID=...; LOGIN_INFO=..."
+                rows={4}
+                className="w-full bg-black/50 border border-white/15 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none font-mono resize-none transition-colors"
+                disabled={isVerifyingCookie}
+              />
+            </div>
+
+            {cookieModalError && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-start gap-2 text-xs text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                <span>{cookieModalError}</span>
+              </div>
+            )}
+
+            {/* Security note */}
+            <div className="text-[10px] text-neutral-400 leading-normal flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>LastWave never sees your Google password. Session tokens are encrypted with AES-256-GCM.</span>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCookieModal(false);
+                  setCookieModalError(null);
+                }}
+                disabled={isVerifyingCookie}
+                className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-neutral-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConnectCookie}
+                disabled={isVerifyingCookie || !cookieInput.trim()}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
+              >
+                {isVerifyingCookie ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Verifying Session...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Connect</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

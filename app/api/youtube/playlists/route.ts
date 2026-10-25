@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserSession, getValidAccessToken } from '@/lib/auth/session';
+import { fetchAuthenticatedYTMPlaylists } from '@/lib/ytmusic-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,9 +8,16 @@ export async function GET(req: NextRequest) {
   try {
     const session = await getUserSession();
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized: User is not authenticated with Google' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized: User is not authenticated' }, { status: 401 });
     }
 
+    // 1. If user authenticated via YouTube Music cookies
+    if (session.authType === 'ytmusic_cookie' && session.ytmCookies) {
+      const playlists = await fetchAuthenticatedYTMPlaylists(session.ytmCookies);
+      return NextResponse.json({ playlists });
+    }
+
+    // 2. Otherwise Google OAuth token
     const accessToken = await getValidAccessToken(session);
     if (!accessToken) {
       return NextResponse.json({ error: 'OAuth token expired. Please re-authenticate.' }, { status: 401 });

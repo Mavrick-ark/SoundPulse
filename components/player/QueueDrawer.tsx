@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { X, Play, Trash2, ListMusic, Disc3, ArrowUp, ArrowDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Play, Trash2, ListMusic, Disc3, ArrowUp, ArrowDown, Radio, Sparkles, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '@/lib/store';
 
 export const QueueDrawer: React.FC = () => {
@@ -15,7 +15,36 @@ export const QueueDrawer: React.FC = () => {
     removeFromQueue,
     clearQueue,
     reorderQueue,
+    setQueue,
   } = usePlayerStore();
+
+  const [isLoadingRadio, setIsLoadingRadio] = useState(false);
+  const [radioActive, setRadioActive] = useState(false);
+
+  const handleStartRadio = async () => {
+    if (!currentSong) return;
+    setIsLoadingRadio(true);
+    try {
+      const vid = currentSong.youtube_id || currentSong.song_name;
+      const res = await fetch(`/api/ytmusic/radio?videoId=${encodeURIComponent(vid)}&limit=25`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tracks && data.tracks.length > 0) {
+          const radioTracks = data.tracks.map((t: any) => ({
+            ...t,
+            album_name: 'YouTube Music Radio',
+          }));
+          // Put current song first, followed by official radio automix
+          setQueue([currentSong, ...radioTracks]);
+          setRadioActive(true);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load YTM radio:', err);
+    } finally {
+      setIsLoadingRadio(false);
+    }
+  };
 
   if (!isQueueOpen) return null;
 
@@ -79,6 +108,26 @@ export const QueueDrawer: React.FC = () => {
                 <span className="w-1.5 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.3s]" />
               </div>
             </div>
+
+            {/* YouTube Music Radio Button (LastWave-Native PureRadioQueue) */}
+            <button
+              onClick={handleStartRadio}
+              disabled={isLoadingRadio}
+              className="w-full mt-2.5 flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 hover:from-indigo-600/30 hover:to-pink-600/30 border border-indigo-500/30 text-indigo-200 text-xs font-semibold transition-all shadow-md shadow-indigo-500/10 active:scale-98"
+            >
+              {isLoadingRadio ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                  <span>Loading YouTube Music Radio...</span>
+                </>
+              ) : (
+                <>
+                  <Radio className="w-3.5 h-3.5 text-pink-400" />
+                  <span>Start YouTube Music Radio Automix</span>
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                </>
+              )}
+            </button>
           </div>
         )}
 

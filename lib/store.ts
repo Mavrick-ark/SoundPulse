@@ -5,7 +5,8 @@ interface ConnectedAccount {
   connected: boolean;
   name?: string;
   email?: string;
-  provider?: 'google' | 'youtube' | 'local';
+  handle?: string;
+  provider?: 'google' | 'youtube' | 'ytmusic_cookie' | 'local';
   avatarUrl?: string;
   connectedAt?: string;
 }
@@ -57,6 +58,7 @@ interface PlayerState {
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
   reorderQueue: (startIndex: number, endIndex: number) => void;
+  setQueue: (songs: Song[]) => void;
   
   // Lyrics, Modals & UI State
   setLyricsOffset: (offset: number) => void;
@@ -258,6 +260,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       result.splice(endIndex, 0, removed);
       return { queue: result };
     }),
+
+  setQueue: (songs) => set({ queue: songs }),
 
   setLyricsOffset: (offset) => set({ lyricsOffset: offset }),
 

@@ -15,6 +15,8 @@ import {
   ListMusic,
   Disc3,
   Sparkles,
+  Radio,
+  Loader2,
 } from 'lucide-react';
 import { usePlayerStore } from '@/lib/store';
 import { formatTime, parseLrc } from '@/lib/lyrics';
@@ -41,9 +43,12 @@ export const FullScreenPlayer: React.FC = () => {
     toggleShuffle,
     toggleRepeat,
     toggleFavorite,
+    setQueue,
+    toggleQueue,
   } = usePlayerStore();
 
   const [activeTab, setActiveTab] = useState<'cover' | 'lyrics'>('cover');
+  const [isLoadingRadio, setIsLoadingRadio] = useState(false);
   const posterColor = usePosterColor(currentSong?.cover_url, currentSong?.song_name);
 
   if (!isFullScreenPlayer || !currentSong) return null;
@@ -88,6 +93,37 @@ export const FullScreenPlayer: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              if (isLoadingRadio || !currentSong) return;
+              setIsLoadingRadio(true);
+              try {
+                const vid = currentSong.youtube_id || currentSong.song_name;
+                const res = await fetch(`/api/ytmusic/radio?videoId=${encodeURIComponent(vid)}&limit=25`);
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.tracks && data.tracks.length > 0) {
+                    setQueue([currentSong, ...data.tracks]);
+                    toggleQueue();
+                  }
+                }
+              } catch (err) {
+                console.warn('Failed to start radio:', err);
+              } finally {
+                setIsLoadingRadio(false);
+              }
+            }}
+            disabled={isLoadingRadio}
+            className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-pink-400 transition-colors disabled:opacity-50"
+            title="Start YouTube Music Automix Radio (PureRadioQueue)"
+          >
+            {isLoadingRadio ? (
+              <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
+            ) : (
+              <Radio className="w-5 h-5" />
+            )}
+          </button>
+
           <button
             onClick={() => setActiveTab(activeTab === 'lyrics' ? 'cover' : 'lyrics')}
             className={`p-2.5 rounded-full transition-colors ${
