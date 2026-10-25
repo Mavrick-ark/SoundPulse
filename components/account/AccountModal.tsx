@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   UserCheck,
@@ -16,7 +16,10 @@ import {
   Link2,
   RefreshCw,
   KeyRound,
-  HelpCircle,
+  Globe,
+  Lock,
+  ArrowUpRight,
+  Info,
 } from 'lucide-react';
 import { usePlayerStore } from '@/lib/store';
 import { createPlaylist } from '@/lib/api';
@@ -25,13 +28,21 @@ interface AccountModalProps {
   onPlaylistImported: () => void;
 }
 
+interface YouTubePlaylist {
+  id: string;
+  title: string;
+  description?: string;
+  thumbnail?: string;
+  itemCount: number;
+  publishedAt?: string;
+}
+
 export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }) => {
   const {
     isAccountModalOpen,
     setAccountModalOpen,
     connectedAccount,
     setConnectedAccount,
-    favoriteIds,
   } = usePlayerStore();
 
   const [playlistInput, setPlaylistInput] = useState('');
@@ -39,13 +50,23 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
   const [playlistPreview, setPlaylistPreview] = useState<any | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncingLibrary, setIsSyncingLibrary] = useState(false);
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isConfigured, setIsConfigured] = useState(true);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [showConfigGuide, setShowConfigGuide] = useState(false);
 
-  // Fetch genuine authenticated session on mount and handle URL auth params
+  // Playlists fetched via supported YouTube Data API
+  const [userPlaylists, setUserPlaylists] = useState<YouTubePlaylist[]>([]);
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
+  const [importingPlaylistId, setImportingPlaylistId] = useState<string | null>(null);
+
+  // Embedding check state
+  const [embeddingState, setEmbeddingState] = useState<'testing' | 'blocked' | 'allowed'>('blocked');
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Fetch session & accessible playlists on mount or modal open
   useEffect(() => {
     if (!isAccountModalOpen) return;
 
@@ -57,7 +78,6 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
 
       if (authStatus === 'success') {
         setSuccessMsg('Google and YouTube account authorized and verified successfully!');
-        // Clean URL without reload
         const newUrl = window.location.pathname;
         window.history.replaceState({}, '', newUrl);
       } else if (authError) {
@@ -91,16 +111,21 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
           if (data.lastSyncedAt) {
             setLastSyncedAt(data.lastSyncedAt);
           }
+          // Fetch playlists via supported API
+          fetchAccessiblePlaylists();
         } else {
           setConnectedAccount(null);
+          setUserPlaylists([]);
         }
       })
       .catch((err) => {
         console.warn('Session verification error:', err);
       });
+
     // Listen for OAuth completion from popup
     const handleAuthMessage = (event: MessageEvent) => {
       if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+        setIsAuthorizing(false);
         fetch('/api/auth/google/session')
           .then((res) => res.json())
           .then((data) => {
@@ -114,6 +139,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                 connectedAt: new Date().toISOString(),
               });
               setSuccessMsg(`Google Account connected as ${data.user.name || 'Google User'}!`);
+              fetchAccessiblePlaylists();
               setTimeout(() => setSuccessMsg(null), 3500);
             }
           });
@@ -124,13 +150,35 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
     return () => window.removeEventListener('message', handleAuthMessage);
   }, [isAccountModalOpen, setConnectedAccount]);
 
+  // Fetch playlists using supported YouTube Data API v3
+  const fetchAccessiblePlaylists = async () => {
+    setIsLoadingPlaylists(true);
+    try {
+      const res = await fetch('/api/youtube/playlists');
+      if (res.ok) {
+        const data = await res.json();
+        setUserPlaylists(data.playlists || []);
+      }
+    } catch (err: any) {
+      console.warn('Failed to load user playlists:', err.message);
+    } finally {
+      setIsLoadingPlaylists(false);
+    }
+  };
+
   if (!isAccountModalOpen) return null;
 
-  // Real OAuth Login in Popup
+  // Open separate browser window to YouTube Music
+  const handleOpenYouTubeMusic = () => {
+    window.open('https://music.youtube.com/', '_blank', 'noopener,noreferrer');
+  };
+
+  // Supported OAuth 2.0 Login in Popup
   const handleConnectGoogle = () => {
     setErrorMsg(null);
-    const width = 480;
-    const height = 620;
+    setIsAuthorizing(true);
+    const width = 500;
+    const height = 640;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
     window.open(
@@ -140,22 +188,53 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
     );
   };
 
-  // Real Disconnect & Revoke
+  // Disconnect & Revoke session
   const handleDisconnect = async () => {
     setErrorMsg(null);
     try {
       await fetch('/api/auth/google/logout', { method: 'POST' });
       setConnectedAccount(null);
       setLastSyncedAt(null);
+      setUserPlaylists([]);
       setPlaylistPreview(null);
-      setSuccessMsg('Google account disconnected successfully.');
+      setSuccessMsg('Account disconnected cleanly.');
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch {
       setErrorMsg('Failed to log out cleanly.');
     }
   };
 
-  // Real Library Synchronization
+  // Import specific playlist into library
+  const handleImportSpecificPlaylist = async (playlist: YouTubePlaylist) => {
+    setImportingPlaylistId(playlist.id);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/import-playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urlOrId: playlist.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to inspect playlist');
+      }
+
+      await createPlaylist(
+        data.title || playlist.title,
+        `Imported from YouTube Music (${playlist.itemCount} songs)`
+      );
+
+      setSuccessMsg(`Imported "${playlist.title}" into your library!`);
+      onPlaylistImported();
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to import playlist');
+    } finally {
+      setImportingPlaylistId(null);
+    }
+  };
+
+  // Library Synchronization
   const handleSyncLibrary = async () => {
     setIsSyncingLibrary(true);
     setErrorMsg(null);
@@ -174,6 +253,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
         `Synchronized ${data.playlistsImported} playlist(s) and ${data.tracksImported} track(s) from YouTube!`
       );
       onPlaylistImported();
+      fetchAccessiblePlaylists();
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to synchronize YouTube library');
@@ -228,8 +308,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
       onPlaylistImported();
       setTimeout(() => {
         setSuccessMsg(null);
-        setAccountModalOpen(false);
-      }, 1500);
+      }, 2500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save playlist');
     } finally {
@@ -238,25 +317,33 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="relative w-full max-w-xl bg-[#0e101a] border border-white/10 rounded-3xl shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl bg-[#0e101a] border border-white/10 rounded-3xl shadow-2xl p-5 sm:p-7 max-h-[92vh] overflow-y-auto">
         {/* Ambient Glow */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-5 border-b border-white/5">
+        <div className="flex items-center justify-between pb-4 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Google & YouTube Account</h3>
-              <p className="text-xs text-neutral-400">OAuth 2.0 connection and library synchronization</p>
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <span>Connect Account</span>
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-indigo-300">
+                  LastWave
+                </span>
+              </h3>
+              <p className="text-xs text-neutral-400">
+                YouTube Music &amp; Google account authorization
+              </p>
             </div>
           </div>
           <button
             onClick={() => setAccountModalOpen(false)}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            title="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -290,20 +377,60 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
             <ol className="list-decimal list-inside space-y-1 text-[11px] text-neutral-400 font-mono bg-black/40 p-2.5 rounded-xl border border-white/5">
               <li>GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com</li>
               <li>GOOGLE_CLIENT_SECRET=your_client_secret</li>
-              <li>GOOGLE_REDIRECT_URI=http://localhost:3001/api/auth/google/callback</li>
+              <li>GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback</li>
             </ol>
-            <p className="text-[10px] text-neutral-400">
-              Create credentials in Google Cloud Console &gt; APIs &amp; Services &gt; Credentials &gt; OAuth 2.0 Client ID (Web Application).
-            </p>
           </div>
         )}
 
-        {/* Section 1: Real Connection Status */}
-        <div className="mt-6 p-4 rounded-2xl bg-white/[0.03] border border-white/5 space-y-4">
+        {/* SECTION 1: YouTube Music Service Connection & Embedding Fallback */}
+        <div className="mt-5 p-4 rounded-2xl bg-white/[0.03] border border-white/5 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white">
+              <Globe className="w-4 h-4 text-pink-400" />
+              <span>YouTube Music Web Portal</span>
+            </div>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/20 flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              <span>Embedding Restricted by Google</span>
+            </span>
+          </div>
+
+          <p className="text-xs text-neutral-300 leading-relaxed">
+            Google enforces strict browser security headers (<code className="text-pink-300 font-mono">X-Frame-Options: SAMEORIGIN</code>) that officially prohibit embedding <code className="text-neutral-200">music.youtube.com</code> inside external applications.
+          </p>
+
+          {/* Prominent explanation box as required */}
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200/90 space-y-1.5 leading-relaxed">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+              <Info className="w-3.5 h-3.5 shrink-0" />
+              <span>Important Authentication Notice</span>
+            </div>
+            <p>
+              Opening and signing into the YouTube Music website in a separate browser window allows you to browse and manage music on YouTube, but <strong>signing in there does not automatically authenticate LastWave</strong>.
+            </p>
+            <p className="text-amber-300/80">
+              To connect your playlists and account with LastWave, use the supported <strong>Authorize YouTube Account</strong> flow below.
+            </p>
+          </div>
+
+          <div className="pt-1 flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleOpenYouTubeMusic}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-white text-xs font-medium transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-pink-400" />
+              <span>Open YouTube Music (Separate Window)</span>
+              <ArrowUpRight className="w-3 h-3 text-neutral-400" />
+            </button>
+          </div>
+        </div>
+
+        {/* SECTION 2: Supported YouTube Authorization Flow (OAuth 2.0) */}
+        <div className="mt-5 p-4 rounded-2xl bg-white/[0.03] border border-white/5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative">
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-neutral-800 border border-white/10 flex items-center justify-center shrink-0">
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-neutral-800 border border-white/10 flex items-center justify-center shrink-0 shadow-md">
                   {connectedAccount?.avatarUrl ? (
                     <img src={connectedAccount.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -312,20 +439,25 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                 </div>
                 <span
                   className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#0e101a] ${
-                    connectedAccount ? 'bg-emerald-400' : 'bg-neutral-500'
+                    connectedAccount ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'
                   }`}
                 />
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-white truncate">
-                  {connectedAccount ? connectedAccount.name : 'Not Connected'}
+                <div className="text-sm font-semibold text-white truncate flex items-center gap-1.5">
+                  <span>{connectedAccount ? connectedAccount.name : 'No Account Authorized'}</span>
+                  {connectedAccount && (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
                 </div>
                 <div className="text-xs text-neutral-400 truncate">
                   {connectedAccount ? (
-                    <span className="text-emerald-400 font-medium">Verified Google &amp; YouTube Account</span>
+                    <span className="text-emerald-400 font-medium">
+                      Verified YouTube &amp; Google Account • {connectedAccount.email}
+                    </span>
                   ) : (
-                    'Guest Mode • Local SQLite Storage'
+                    'Guest Session • Connect via supported OAuth 2.0 flow'
                   )}
                 </div>
               </div>
@@ -343,23 +475,28 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
               ) : (
                 <button
                   onClick={handleConnectGoogle}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-xs font-semibold hover:scale-105 active:scale-95 transition-all shadow-md shadow-white/10"
+                  disabled={isAuthorizing}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-black text-xs font-semibold hover:scale-105 active:scale-95 transition-all shadow-md shadow-white/10 disabled:opacity-50"
                 >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>Connect Google</span>
+                  {isAuthorizing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-neutral-800" />
+                  ) : (
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  )}
+                  <span>Authorize YouTube Account</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Connected Actions (Sync Library) */}
+          {/* Sync All Button for Authorized Users */}
           {connectedAccount && (
             <div className="pt-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-3">
               <div className="text-[11px] text-neutral-400">
                 {lastSyncedAt ? (
                   <span>Last synced: {new Date(lastSyncedAt).toLocaleTimeString()}</span>
                 ) : (
-                  <span>Library not yet synchronized</span>
+                  <span>Library ready for synchronization</span>
                 )}
               </div>
               <button
@@ -368,22 +505,88 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold disabled:opacity-50 transition-all shadow-md shadow-indigo-600/20"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncingLibrary ? 'animate-spin' : ''}`} />
-                <span>{isSyncingLibrary ? 'Syncing Library...' : 'Sync YouTube Library'}</span>
+                <span>{isSyncingLibrary ? 'Syncing...' : 'Sync All Playlists'}</span>
               </button>
             </div>
           )}
 
           <div className="pt-2 border-t border-white/5 text-[11px] text-neutral-400 leading-relaxed">
-            <span className="font-semibold text-neutral-300">OAuth Scopes: </span>
-            Requests official read-only scopes (<code className="text-indigo-300">youtube.readonly</code>) to import your playlists without modifying your account.
+            <span className="font-semibold text-neutral-300">Supported Authorization: </span>
+            Uses official read-only scope (<code className="text-indigo-300">youtube.readonly</code>) to securely retrieve your accessible playlists without accessing passwords or private browser cookies.
           </div>
         </div>
 
-        {/* Section 2: Import YouTube Playlist by URL */}
-        <div className="mt-6 space-y-3">
+        {/* SECTION 3: Actual Accessible Playlists (Retrieved via Supported API) */}
+        {connectedAccount && (
+          <div className="mt-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
+                <ListMusic className="w-4 h-4 text-indigo-400" />
+                <span>Your Accessible YouTube Playlists</span>
+              </h4>
+              <button
+                onClick={fetchAccessiblePlaylists}
+                disabled={isLoadingPlaylists}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+              >
+                <RefreshCw className={`w-3 h-3 ${isLoadingPlaylists ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {isLoadingPlaylists ? (
+              <div className="py-8 flex flex-col items-center justify-center gap-2 text-neutral-400 text-xs">
+                <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+                <span>Retrieving playlists via YouTube API...</span>
+              </div>
+            ) : userPlaylists.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                {userPlaylists.map((pl) => (
+                  <div
+                    key={pl.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 transition-colors gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-neutral-800 shrink-0 border border-white/10">
+                        {pl.thumbnail ? (
+                          <img src={pl.thumbnail} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-neutral-500">
+                            <ListMusic className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white truncate" title={pl.title}>
+                          {pl.title}
+                        </p>
+                        <p className="text-[10px] text-neutral-400">{pl.itemCount} tracks</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleImportSpecificPlaylist(pl)}
+                      disabled={importingPlaylistId === pl.id}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-white text-[11px] font-medium shrink-0 disabled:opacity-50 transition-colors"
+                    >
+                      {importingPlaylistId === pl.id ? 'Importing...' : 'Import'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 text-center text-xs text-neutral-400">
+                No accessible playlists found on this YouTube account yet.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SECTION 4: Import Public Playlist by URL / ID */}
+        <div className="mt-5 space-y-3">
           <h4 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
-            <ListMusic className="w-4 h-4 text-indigo-400" />
-            <span>Import Public / Unlisted YouTube Playlist</span>
+            <Link2 className="w-4 h-4 text-indigo-400" />
+            <span>Import Playlist via Direct Link</span>
           </h4>
 
           <form onSubmit={handleFetchPlaylist} className="flex gap-2">
@@ -394,91 +597,45 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                 value={playlistInput}
                 onChange={(e) => setPlaylistInput(e.target.value)}
                 placeholder="Paste YouTube playlist URL (e.g. https://www.youtube.com/playlist?list=...)"
-                className="w-full pl-10 pr-3 py-2.5 text-xs sm:text-sm rounded-xl bg-white/[0.04] border border-white/10 focus:border-indigo-500 text-white placeholder-neutral-500 outline-none"
+                className="w-full pl-10 pr-3 py-2 text-xs sm:text-sm rounded-xl bg-white/[0.04] border border-white/10 focus:border-indigo-500 text-white placeholder-neutral-500 outline-none"
               />
             </div>
             <button
               type="submit"
               disabled={isFetchingPlaylist || !playlistInput.trim()}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold disabled:opacity-50 transition-all shrink-0 shadow-md shadow-indigo-600/30"
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold disabled:opacity-50 transition-colors shrink-0"
             >
-              {isFetchingPlaylist ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Inspecting...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Preview</span>
-                </>
-              )}
+              {isFetchingPlaylist ? 'Inspecting...' : 'Inspect'}
             </button>
           </form>
-        </div>
 
-        {/* Playlist Preview Container */}
-        {playlistPreview && (
-          <div className="mt-5 p-4 rounded-2xl bg-white/[0.04] border border-white/10 space-y-4 animate-in fade-in">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-bold text-white">{playlistPreview.title}</div>
-                <div className="text-xs text-neutral-400">
-                  By {playlistPreview.creator} • {playlistPreview.itemCount} Tracks Found
+          {/* Playlist Preview Card */}
+          {playlistPreview && (
+            <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-800 shrink-0 border border-white/10">
+                  {playlistPreview.thumbnail ? (
+                    <img src={playlistPreview.thumbnail} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <ListMusic className="w-6 h-6 text-neutral-500 m-auto" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm font-semibold text-white truncate">{playlistPreview.title}</p>
+                  <p className="text-[11px] text-neutral-400 truncate">
+                    {playlistPreview.creator} • {playlistPreview.tracks?.length || 0} tracks
+                  </p>
                 </div>
               </div>
               <button
                 onClick={handleSaveToLibrary}
                 disabled={isSaving}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/30 transition-all"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shrink-0 transition-colors"
               >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Import to Library</span>
-                  </>
-                )}
+                {isSaving ? 'Saving...' : 'Save to Library'}
               </button>
             </div>
-
-            {/* Preview items list */}
-            <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 text-xs">
-              {playlistPreview.tracks.map((t: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
-                    <div className="w-8 h-8 rounded-md overflow-hidden bg-neutral-800 shrink-0">
-                      {t.artworkUrl && <img src={t.artworkUrl} alt="" className="w-full h-full object-cover" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-white truncate">{t.title}</div>
-                      <div className="text-[10px] text-neutral-400 truncate">{t.artist}</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-neutral-500 font-mono shrink-0">Track {idx + 1}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Section 3: Library Stats & Policy Transparency */}
-        <div className="mt-6 pt-5 border-t border-white/5 flex items-center justify-between text-xs text-neutral-400">
-          <div>
-            <span>Liked Songs: </span>
-            <span className="font-semibold text-white">{favoriteIds.length}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Official YouTube Data API v3 OAuth</span>
-          </div>
+          )}
         </div>
       </div>
     </div>

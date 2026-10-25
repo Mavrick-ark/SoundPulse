@@ -59,17 +59,13 @@ export const Header: React.FC = () => {
           <span className="sm:hidden">Import</span>
         </button>
 
-        {/* Connect Google Account Button */}
+        {/* Connect Account Button */}
         <button
           onClick={() => {
-            if (connectedAccount) {
-              setAccountModalOpen(true);
-            } else {
-              setGoogleModalOpen(true);
-            }
+            setAccountModalOpen(true);
           }}
           className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-neutral-200 transition-colors cursor-pointer"
-          title={connectedAccount ? 'Manage Connected Account' : 'Connect Google Account'}
+          title={connectedAccount ? 'Manage Connected Account' : 'Connect Account'}
         >
           {connectedAccount ? (
             <>
@@ -79,7 +75,7 @@ export const Header: React.FC = () => {
           ) : (
             <>
               <User className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden md:inline">Connect Google Account</span>
+              <span className="hidden md:inline">Connect Account</span>
             </>
           )}
         </button>

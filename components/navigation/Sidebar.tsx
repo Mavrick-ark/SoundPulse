@@ -137,14 +137,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ playlists }) => {
       <div className="pt-3 border-t border-white/5">
         <button
           onClick={() => {
-            if (connectedAccount) {
-              setAccountModalOpen(true);
-            } else {
-              setGoogleModalOpen(true);
-            }
+            setAccountModalOpen(true);
           }}
           className="w-full flex items-center justify-between p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 text-left transition-colors cursor-pointer"
-          title={connectedAccount ? 'Manage Account' : 'Connect Google Account'}
+          title={connectedAccount ? 'Manage Account' : 'Connect Account'}
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center shrink-0">
