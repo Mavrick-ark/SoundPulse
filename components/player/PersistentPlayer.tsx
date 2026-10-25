@@ -16,10 +16,12 @@ import {
   Maximize2,
   Heart,
   Disc3,
+  Sparkles,
+  Radio,
 } from 'lucide-react';
 import { usePlayerStore } from '@/lib/store';
-import { formatTime } from '@/lib/lyrics';
 import { toggleSongLikeApi } from '@/lib/api';
+import { WaveScrubber } from './WaveScrubber';
 
 export const PersistentPlayer: React.FC = () => {
   const {
@@ -46,44 +48,77 @@ export const PersistentPlayer: React.FC = () => {
     setFullScreenPlayer,
     isLyricsOpen,
     isQueueOpen,
+    queue,
   } = usePlayerStore();
 
-  if (!currentSong) return null;
-
-  const isLiked = favoriteIds.includes(currentSong.song_id);
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value);
-    seekTo(time);
-  };
+  const isLiked = currentSong ? favoriteIds.includes(currentSong.song_id) : false;
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setVolume(parseFloat(e.target.value));
   };
 
   const handleLike = () => {
+    if (!currentSong) return;
     toggleFavorite(currentSong.song_id);
     toggleSongLikeApi(currentSong.song_id);
   };
 
+  // When no song is active, show the dock bar ready with music
+  if (!currentSong) {
+    return (
+      <div className="fixed bottom-14 md:bottom-0 left-0 right-0 z-40 bg-[#0d0f17]/95 backdrop-blur-2xl border-t border-white/10 px-3 sm:px-6 py-2.5 pb-safe select-none shadow-[0_-10px_35px_rgba(0,0,0,0.6)]">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600/30 to-pink-600/30 border border-white/10 flex items-center justify-center text-indigo-400 shrink-0 shadow-md">
+              <Radio className="w-5 h-5 text-indigo-400 animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-semibold text-white truncate flex items-center gap-1.5">
+                <span>SoundPulse Player Ready</span>
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              </p>
+              <p className="text-[10px] sm:text-xs text-neutral-400 truncate">
+                Tap any track to play with Samsung-style wave timeline
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => togglePlay()}
+              className="px-4 py-2 rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:opacity-95 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-500/25 transition-transform hover:scale-105 active:scale-95"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span className="hidden sm:inline">Play Trending</span>
+              <span className="sm:hidden">Play</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#0d0f17]/95 backdrop-blur-2xl border-t border-white/10 px-3 sm:px-6 py-2.5 pb-safe select-none shadow-[0_-10px_35px_rgba(0,0,0,0.6)]">
-      {/* Top micro progress bar for mobile glance */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/10">
+    <div className="fixed bottom-14 md:bottom-0 left-0 right-0 z-40 bg-[#0d0f17]/95 backdrop-blur-2xl border-t border-white/10 px-3 sm:px-6 py-2 pb-safe select-none shadow-[0_-10px_35px_rgba(0,0,0,0.7)]">
+      {/* Top micro wave accent for glance */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/5 overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-indigo-500 to-pink-500 transition-all duration-150"
+          className={`h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-200 ${
+            isPlaying ? 'shadow-[0_0_8px_rgba(236,72,153,0.8)]' : ''
+          }`}
           style={{ width: `${progressPercent}%` }}
         />
       </div>
 
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-6">
         {/* Track Metadata (Left) */}
-        <div className="flex items-center gap-3 min-w-0 max-w-[40%] sm:max-w-[280px]">
+        <div className="flex items-center gap-3 min-w-0 max-w-[45%] sm:max-w-[280px]">
           <div
             onClick={() => setFullScreenPlayer(true)}
-            className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-neutral-800 border border-white/10 cursor-pointer group shadow-md"
+            className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-xl overflow-hidden shrink-0 bg-neutral-800 border border-white/10 cursor-pointer group shadow-md"
+            title="Open Full Screen Player"
           >
             {currentSong.cover_url ? (
               <img
@@ -96,23 +131,24 @@ export const PersistentPlayer: React.FC = () => {
                 <Disc3 className={`w-6 h-6 ${isPlaying ? 'animate-spin' : ''}`} />
               </div>
             )}
-            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
               <Maximize2 className="w-4 h-4 text-white" />
             </div>
           </div>
 
-          <div className="min-w-0 flex-1">
-            <button
-              onClick={() => togglePlay()}
+          <div
+            className="min-w-0 flex-1 cursor-pointer"
+            onClick={() => setFullScreenPlayer(true)}
+          >
+            <p
               title={currentSong.song_name}
-              className="text-left w-full text-xs sm:text-sm font-semibold text-white truncate hover:text-indigo-400 transition-colors block cursor-pointer"
+              className="text-xs sm:text-sm font-semibold text-white truncate hover:text-indigo-400 transition-colors"
             >
               {currentSong.song_name}
-            </button>
+            </p>
             <p
               title={currentSong.artist_name}
-              className="text-[11px] sm:text-xs text-neutral-400 truncate hover:text-neutral-200 transition-colors cursor-pointer"
-              onClick={() => setFullScreenPlayer(true)}
+              className="text-[10px] sm:text-xs text-neutral-400 truncate hover:text-neutral-200 transition-colors"
             >
               {currentSong.artist_name}
             </p>
@@ -123,13 +159,14 @@ export const PersistentPlayer: React.FC = () => {
             className={`p-1.5 rounded-full hover:bg-white/10 transition-colors shrink-0 ${
               isLiked ? 'text-pink-500' : 'text-neutral-400 hover:text-white'
             }`}
+            title={isLiked ? 'Unlike' : 'Like'}
           >
             <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
           </button>
         </div>
 
-        {/* Center Playback Controls */}
-        <div className="flex flex-col items-center flex-1 max-w-xl px-2">
+        {/* Center Playback Controls + Dynamic Wave Scrubber */}
+        <div className="flex flex-col items-center flex-1 max-w-xl px-1 sm:px-2 min-w-0">
           <div className="flex items-center gap-2 sm:gap-5">
             <button
               onClick={toggleShuffle}
@@ -186,37 +223,33 @@ export const PersistentPlayer: React.FC = () => {
             </button>
           </div>
 
-          {/* Time Scrubber (Hidden on smallest mobile screens for compactness) */}
-          <div className="w-full hidden sm:flex items-center gap-2 mt-1">
-            <span className="text-[10px] text-neutral-400 tabular-nums w-8 text-right font-medium">
-              {formatTime(currentTime)}
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={duration || 100}
-              step={0.5}
-              value={currentTime}
-              onChange={handleSeek}
-              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all"
+          {/* Samsung Waveform Timeline Scrubber (Desktop/Tablet) */}
+          <div className="w-full hidden sm:block -mt-0.5">
+            <WaveScrubber
+              currentTime={currentTime}
+              duration={duration}
+              isPlaying={isPlaying}
+              onSeek={(t) => seekTo(t)}
+              height={22}
+              waveAmplitude={3.5}
+              waveFrequency={0.04}
+              showTimestamps={true}
+              glow={true}
             />
-            <span className="text-[10px] text-neutral-400 tabular-nums w-8 font-medium">
-              {formatTime(duration)}
-            </span>
           </div>
         </div>
 
         {/* Right Aux Controls */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
           {/* Synchronized Lyrics Button */}
           <button
             onClick={toggleLyrics}
-            className={`p-2 rounded-xl transition-all duration-200 ${
+            className={`p-1.5 sm:p-2 rounded-xl transition-all duration-200 ${
               isLyricsOpen
                 ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 shadow-sm'
                 : 'text-neutral-400 hover:text-white hover:bg-white/5'
             }`}
-            title="Lyrics & Offset Calibration"
+            title="Synchronized Lyrics"
           >
             <Mic2 className="w-4 h-4" />
           </button>
@@ -224,12 +257,12 @@ export const PersistentPlayer: React.FC = () => {
           {/* Queue Drawer Button */}
           <button
             onClick={toggleQueue}
-            className={`p-2 rounded-xl transition-all duration-200 ${
+            className={`p-1.5 sm:p-2 rounded-xl transition-all duration-200 ${
               isQueueOpen
                 ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 shadow-sm'
                 : 'text-neutral-400 hover:text-white hover:bg-white/5'
             }`}
-            title="Play Queue"
+            title="Queue"
           >
             <ListMusic className="w-4 h-4" />
           </button>
@@ -260,8 +293,8 @@ export const PersistentPlayer: React.FC = () => {
           {/* Expand Fullscreen Player */}
           <button
             onClick={() => setFullScreenPlayer(true)}
-            className="p-2 text-neutral-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
-            title="Full Screen Player"
+            className="p-1.5 sm:p-2 text-neutral-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+            title="Expand to Full Screen Wave Player"
           >
             <Maximize2 className="w-4 h-4" />
           </button>

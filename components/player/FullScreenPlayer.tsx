@@ -19,6 +19,7 @@ import {
 import { usePlayerStore } from '@/lib/store';
 import { formatTime, parseLrc } from '@/lib/lyrics';
 import { toggleSongLikeApi } from '@/lib/api';
+import { WaveScrubber } from './WaveScrubber';
 
 export const FullScreenPlayer: React.FC = () => {
   const {
@@ -167,21 +168,19 @@ export const FullScreenPlayer: React.FC = () => {
 
       {/* Bottom Controls */}
       <div className="relative z-10 max-w-xl mx-auto w-full space-y-4">
-        {/* Scrubber */}
-        <div>
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            step={0.5}
-            value={currentTime}
-            onChange={handleSeek}
-            className="w-full h-1.5 bg-white/15 rounded-lg appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400"
+        {/* Samsung Undulating Wave Timeline Scrubber */}
+        <div className="w-full px-1">
+          <WaveScrubber
+            currentTime={currentTime}
+            duration={duration}
+            isPlaying={isPlaying}
+            onSeek={(time) => seekTo(time)}
+            height={44}
+            waveAmplitude={6}
+            waveFrequency={0.032}
+            showTimestamps={true}
+            glow={true}
           />
-          <div className="flex justify-between text-xs text-neutral-400 font-medium mt-1.5">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
         </div>
 
         {/* Playback Buttons */}
