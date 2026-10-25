@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { formatTime } from '@/lib/lyrics';
+import { usePosterColor, ExtractedColors } from '@/lib/colorExtractor';
 
 interface WaveScrubberProps {
   currentTime: number;
@@ -10,11 +11,10 @@ interface WaveScrubberProps {
   onSeek: (time: number) => void;
   className?: string;
   height?: number;
-  waveAmplitude?: number;
-  waveFrequency?: number;
+  coverUrl?: string | null;
+  seedTitle?: string;
+  customColor?: string;
   showTimestamps?: boolean;
-  color?: string; // Tailwind or hex
-  glow?: boolean;
 }
 
 export const WaveScrubber: React.FC<WaveScrubberProps> = ({
@@ -24,10 +24,10 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
   onSeek,
   className = '',
   height = 36,
-  waveAmplitude = 5,
-  waveFrequency = 0.035,
+  coverUrl,
+  seedTitle = 'SoundPulse',
+  customColor,
   showTimestamps = true,
-  glow = true,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -35,11 +35,17 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
   const [phase, setPhase] = useState(0);
   const animFrameRef = useRef<number | null>(null);
 
+  // Dynamically extract color from the song's poster/album art
+  const extracted = usePosterColor(coverUrl, seedTitle);
+  const primaryColor = customColor || extracted.primary;
+  const haloColor = extracted.halo;
+  const glowColor = extracted.glow;
+
   const effectiveDuration = duration > 0 ? duration : 210;
   const activeTime = isDragging && dragTime !== null ? dragTime : currentTime;
   const progressRatio = Math.max(0, Math.min(1, activeTime / effectiveDuration));
 
-  // Continuous undulating wave animation while playing (Samsung style)
+  // 60fps Continuous undulating wave animation while playing (Samsung One UI style)
   useEffect(() => {
     let lastTime = performance.now();
 
@@ -49,7 +55,7 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
 
       if (isPlaying) {
         // Shift wave phase smoothly
-        setPhase((prev) => (prev + delta * 4.5) % (Math.PI * 20));
+        setPhase((prev) => (prev + delta * 3.8) % (Math.PI * 20));
       }
 
       animFrameRef.current = requestAnimationFrame(animate);
@@ -64,7 +70,7 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
     };
   }, [isPlaying]);
 
-  // Compute time from mouse/touch clientX position
+  // Compute time from clientX position
   const calculateTimeFromX = useCallback(
     (clientX: number) => {
       if (!containerRef.current) return 0;
@@ -76,7 +82,6 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
     [effectiveDuration]
   );
 
-  // Drag & click interactions
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
@@ -102,47 +107,60 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
     } catch (_) {}
   };
 
-  // Generate SVG paths for the undulating Samsung wave
   const viewBoxWidth = 600;
   const viewBoxHeight = height;
-  const centerY = viewBoxHeight / 2;
-  const currentAmp = isPlaying ? waveAmplitude : waveAmplitude * 0.35;
-
+  const baseY = viewBoxHeight - 10; // Baseline near bottom of SVG
   const currentX = progressRatio * viewBoxWidth;
 
-  // Build played wave path (undulating sinusoidal wave)
-  let playedPath = '';
-  const step = 4; // resolution
-  for (let x = 0; x <= currentX; x += step) {
-    // Dampen amplitude near start and end of played segment for organic aesthetic
-    const envelope = Math.sin((x / Math.max(1, currentX)) * Math.PI);
-    const amp = currentAmp * (0.4 + 0.6 * envelope);
-    const y = centerY + Math.sin(x * waveFrequency - phase) * amp;
-
-    if (x === 0) {
-      playedPath += `M ${x.toFixed(1)} ${y.toFixed(1)}`;
-    } else {
-      playedPath += ` L ${x.toFixed(1)} ${y.toFixed(1)}`;
+  // Generate the overlapping dancing waves matching Samsung One UI seekbar
+  const { wavePath1, wavePath2, wavePath3 } = useMemo(() => {
+    if (currentX <= 4) {
+      return { wavePath1: '', wavePath2: '', wavePath3: '' };
     }
-  }
 
-  // Ensure path reaches exact currentX
-  const endY = centerY + Math.sin(currentX * waveFrequency - phase) * (currentAmp * 0.4);
-  playedPath += ` L ${currentX.toFixed(1)} ${endY.toFixed(1)}`;
+    const maxAmp1 = isPlaying ? 9 : 4;
+    const maxAmp2 = isPlaying ? 6 : 2.5;
+    const maxAmp3 = isPlaying ? 4 : 1.5;
 
-  // Remaining path: smooth sleek line to end of track
-  const remainingPath = `M ${currentX.toFixed(1)} ${endY.toFixed(1)} L ${viewBoxWidth} ${centerY.toFixed(1)}`;
+    let p1 = `M 0 ${baseY}`;
+    let p2 = `M 0 ${baseY}`;
+    let p3 = `M 0 ${baseY}`;
+
+    const step = 3;
+    for (let x = 0; x <= currentX; x += step) {
+      // Bell envelope so wave rises from baseline at x=0 and lands back at currentX
+      const t = x / currentX;
+      const envelope = Math.sin(t * Math.PI);
+
+      // Strand 1: Primary undulating crest
+      const y1 = baseY - Math.abs(Math.sin(x * 0.038 - phase)) * maxAmp1 * envelope;
+      // Strand 2: Secondary offset wave ribbon
+      const y2 = baseY - Math.abs(Math.sin(x * 0.045 - phase - 1.4)) * maxAmp2 * envelope;
+      // Strand 3: Tertiary subtle wave
+      const y3 = baseY - Math.abs(Math.sin(x * 0.032 - phase - 2.8)) * maxAmp3 * envelope;
+
+      p1 += ` L ${x.toFixed(1)} ${y1.toFixed(1)}`;
+      p2 += ` L ${x.toFixed(1)} ${y2.toFixed(1)}`;
+      p3 += ` L ${x.toFixed(1)} ${y3.toFixed(1)}`;
+    }
+
+    p1 += ` L ${currentX.toFixed(1)} ${baseY}`;
+    p2 += ` L ${currentX.toFixed(1)} ${baseY}`;
+    p3 += ` L ${currentX.toFixed(1)} ${baseY}`;
+
+    return { wavePath1: p1, wavePath2: p2, wavePath3: p3 };
+  }, [currentX, baseY, isPlaying, phase]);
 
   return (
     <div className={`w-full select-none ${className}`}>
-      {/* Interactive Waveform Canvas/SVG Container */}
+      {/* Interactive Wave Scrubber SVG */}
       <div
         ref={containerRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative w-full cursor-pointer py-2 group touch-none"
+        className="relative w-full cursor-pointer py-1.5 group touch-none"
         style={{ height: `${height}px` }}
         title="Seek position"
       >
@@ -152,69 +170,96 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
           className="w-full h-full overflow-visible"
         >
           <defs>
-            {/* Liquid neon gradient for the active wave */}
-            <linearGradient id="samsungWaveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#6366f1" />
-              <stop offset="50%" stopColor="#8b5cf6" />
-              <stop offset="100%" stopColor="#ec4899" />
-            </linearGradient>
-
-            {/* Glowing filter */}
-            {glow && (
-              <filter id="waveGlow" x="-20%" y="-50%" width="140%" height="200%">
-                <feGaussianBlur stdDeviation="2.5" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            )}
+            {/* Dynamic Poster Glow filter */}
+            <filter id={`posterGlow-${primaryColor.replace('#', '')}`} x="-20%" y="-50%" width="140%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
           </defs>
 
-          {/* Background straight unplayed rail */}
+          {/* 1. Background Unplayed Rail (Straight subtle track) */}
           <line
             x1="0"
-            y1={centerY}
+            y1={baseY}
             x2={viewBoxWidth}
-            y2={centerY}
-            stroke="rgba(255, 255, 255, 0.12)"
-            strokeWidth="3"
+            y2={baseY}
+            stroke="rgba(255, 255, 255, 0.16)"
+            strokeWidth="3.5"
             strokeLinecap="round"
           />
 
-          {/* Unplayed remaining section */}
-          <path
-            d={remainingPath}
-            fill="none"
-            stroke="rgba(255, 255, 255, 0.2)"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-
-          {/* Played Undulating Samsung Wave */}
+          {/* 2. Played Base Rail (Solid colored line up to currentX) */}
           {currentX > 0 && (
-            <path
-              d={playedPath}
-              fill="none"
-              stroke="url(#samsungWaveGradient)"
+            <line
+              x1="0"
+              y1={baseY}
+              x2={currentX}
+              y2={baseY}
+              stroke={primaryColor}
               strokeWidth="4"
               strokeLinecap="round"
-              filter={glow ? 'url(#waveGlow)' : undefined}
-              className="transition-[stroke-width] group-hover:stroke-[5px]"
             />
           )}
 
-          {/* Samsung Wave Handle / Playhead Dot */}
-          <circle
-            cx={currentX}
-            cy={endY}
-            r={isDragging ? 7.5 : 5.5}
-            fill="#ffffff"
-            className="transition-all duration-150 drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]"
-          />
+          {/* 3. Samsung Dancing Wave Strands (Rising above baseline) */}
+          {currentX > 4 && (
+            <>
+              {/* Strand 3 (Soft background ribbon) */}
+              <path
+                d={wavePath3}
+                fill="none"
+                stroke={primaryColor}
+                strokeWidth="1.5"
+                strokeOpacity="0.4"
+                strokeLinecap="round"
+              />
+              {/* Strand 2 (Middle ribbon) */}
+              <path
+                d={wavePath2}
+                fill="none"
+                stroke={primaryColor}
+                strokeWidth="1.8"
+                strokeOpacity="0.65"
+                strokeLinecap="round"
+              />
+              {/* Strand 1 (Primary crest ribbon with glow) */}
+              <path
+                d={wavePath1}
+                fill="none"
+                stroke={primaryColor}
+                strokeWidth="2.2"
+                strokeOpacity="0.9"
+                strokeLinecap="round"
+                filter={`url(#posterGlow-${primaryColor.replace('#', '')})`}
+              />
+            </>
+          )}
+
+          {/* 4. Playhead Thumb (Outer translucent halo + Inner solid dot like Samsung screenshot) */}
+          <g transform={`translate(${currentX}, ${baseY})`}>
+            {/* Outer Translucent Halo Ring */}
+            <circle
+              cx="0"
+              cy="0"
+              r={isDragging ? 12 : 9.5}
+              fill={haloColor}
+              className="transition-all duration-150"
+            />
+            {/* Inner Solid Playhead Dot */}
+            <circle
+              cx="0"
+              cy="0"
+              r={isDragging ? 6.5 : 5}
+              fill={primaryColor}
+              className="transition-all duration-150 drop-shadow-[0_0_6px_rgba(0,0,0,0.5)]"
+            />
+          </g>
         </svg>
 
-        {/* Hover / Scrub Floating Time Tooltip */}
+        {/* Hover / Drag Floating Time Tooltip */}
         {isDragging && dragTime !== null && (
           <div
             className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-neutral-900 border border-white/20 text-[10px] font-mono text-white shadow-xl pointer-events-none"
@@ -227,9 +272,16 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
 
       {/* Timestamps */}
       {showTimestamps && (
-        <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400 -mt-1 px-0.5">
-          <span className="tabular-nums text-neutral-300 font-semibold">{formatTime(activeTime)}</span>
-          <span className="tabular-nums text-neutral-500">{formatTime(effectiveDuration)}</span>
+        <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400 mt-0.5 px-0.5">
+          <span
+            className="tabular-nums font-semibold transition-colors"
+            style={{ color: primaryColor }}
+          >
+            {formatTime(activeTime)}
+          </span>
+          <span className="tabular-nums text-neutral-500">
+            {formatTime(effectiveDuration)}
+          </span>
         </div>
       )}
     </div>

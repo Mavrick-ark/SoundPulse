@@ -22,6 +22,7 @@ import {
 import { usePlayerStore } from '@/lib/store';
 import { toggleSongLikeApi } from '@/lib/api';
 import { WaveScrubber } from './WaveScrubber';
+import { usePosterColor } from '@/lib/colorExtractor';
 
 export const PersistentPlayer: React.FC = () => {
   const {
@@ -51,6 +52,7 @@ export const PersistentPlayer: React.FC = () => {
     queue,
   } = usePlayerStore();
 
+  const posterColor = usePosterColor(currentSong?.cover_url, currentSong?.song_name);
   const isLiked = currentSong ? favoriteIds.includes(currentSong.song_id) : false;
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,13 +104,15 @@ export const PersistentPlayer: React.FC = () => {
 
   return (
     <div className="fixed bottom-14 md:bottom-0 left-0 right-0 z-40 bg-[#0d0f17]/95 backdrop-blur-2xl border-t border-white/10 px-3 sm:px-6 py-2 pb-safe select-none shadow-[0_-10px_35px_rgba(0,0,0,0.7)]">
-      {/* Top micro wave accent for glance */}
+      {/* Top micro wave accent for glance (Colored by poster) */}
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/5 overflow-hidden">
         <div
-          className={`h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-200 ${
-            isPlaying ? 'shadow-[0_0_8px_rgba(236,72,153,0.8)]' : ''
-          }`}
-          style={{ width: `${progressPercent}%` }}
+          className="h-full transition-all duration-200"
+          style={{
+            width: `${progressPercent}%`,
+            backgroundColor: posterColor.primary,
+            boxShadow: isPlaying ? `0 0 10px ${posterColor.halo}` : undefined,
+          }}
         />
       </div>
 
@@ -230,11 +234,10 @@ export const PersistentPlayer: React.FC = () => {
               duration={duration}
               isPlaying={isPlaying}
               onSeek={(t) => seekTo(t)}
-              height={22}
-              waveAmplitude={3.5}
-              waveFrequency={0.04}
+              height={26}
+              coverUrl={currentSong.cover_url}
+              seedTitle={currentSong.song_name}
               showTimestamps={true}
-              glow={true}
             />
           </div>
         </div>

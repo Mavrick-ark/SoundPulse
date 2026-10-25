@@ -20,6 +20,7 @@ import { usePlayerStore } from '@/lib/store';
 import { formatTime, parseLrc } from '@/lib/lyrics';
 import { toggleSongLikeApi } from '@/lib/api';
 import { WaveScrubber } from './WaveScrubber';
+import { usePosterColor } from '@/lib/colorExtractor';
 
 export const FullScreenPlayer: React.FC = () => {
   const {
@@ -43,6 +44,7 @@ export const FullScreenPlayer: React.FC = () => {
   } = usePlayerStore();
 
   const [activeTab, setActiveTab] = useState<'cover' | 'lyrics'>('cover');
+  const posterColor = usePosterColor(currentSong?.cover_url, currentSong?.song_name);
 
   if (!isFullScreenPlayer || !currentSong) return null;
 
@@ -55,10 +57,6 @@ export const FullScreenPlayer: React.FC = () => {
     return adjusted >= l.time && adjusted < nextTime;
   });
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    seekTo(parseFloat(e.target.value));
-  };
-
   const handleLike = () => {
     toggleFavorite(currentSong.song_id);
     toggleSongLikeApi(currentSong.song_id);
@@ -66,8 +64,11 @@ export const FullScreenPlayer: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-[#08090d]/95 backdrop-blur-3xl flex flex-col justify-between p-6 md:p-12 overflow-y-auto animate-in fade-in duration-300">
-      {/* Background Ambient Glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-[120px] pointer-events-none" />
+      {/* Background Dynamic Poster Ambient Glow */}
+      <div
+        className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full blur-[140px] pointer-events-none transition-all duration-700 opacity-20"
+        style={{ backgroundColor: posterColor.primary }}
+      />
 
       {/* Top Header */}
       <div className="relative z-10 flex items-center justify-between">
@@ -168,18 +169,17 @@ export const FullScreenPlayer: React.FC = () => {
 
       {/* Bottom Controls */}
       <div className="relative z-10 max-w-xl mx-auto w-full space-y-4">
-        {/* Samsung Undulating Wave Timeline Scrubber */}
+        {/* Samsung Undulating Wave Timeline Scrubber (Dynamic Poster Color) */}
         <div className="w-full px-1">
           <WaveScrubber
             currentTime={currentTime}
             duration={duration}
             isPlaying={isPlaying}
             onSeek={(time) => seekTo(time)}
-            height={44}
-            waveAmplitude={6}
-            waveFrequency={0.032}
+            height={46}
+            coverUrl={currentSong.cover_url}
+            seedTitle={currentSong.song_name}
             showTimestamps={true}
-            glow={true}
           />
         </div>
 
@@ -188,8 +188,9 @@ export const FullScreenPlayer: React.FC = () => {
           <button
             onClick={toggleShuffle}
             className={`p-2 transition-colors ${
-              isShuffle ? 'text-indigo-400' : 'text-neutral-400 hover:text-white'
+              isShuffle ? 'text-white' : 'text-neutral-400 hover:text-white'
             }`}
+            style={{ color: isShuffle ? posterColor.primary : undefined }}
             title="Shuffle"
           >
             <Shuffle className="w-5 h-5" />
@@ -205,7 +206,11 @@ export const FullScreenPlayer: React.FC = () => {
 
           <button
             onClick={togglePlay}
-            className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center shadow-xl shadow-white/20 hover:scale-105 active:scale-95 transition-transform"
+            style={{
+              backgroundColor: posterColor.primary,
+              boxShadow: `0 8px 25px ${posterColor.halo}`,
+            }}
+            className="w-16 h-16 rounded-full text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
             title={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? (
@@ -226,8 +231,9 @@ export const FullScreenPlayer: React.FC = () => {
           <button
             onClick={toggleRepeat}
             className={`p-2 transition-colors ${
-              repeatMode !== 'off' ? 'text-indigo-400' : 'text-neutral-400 hover:text-white'
+              repeatMode !== 'off' ? 'text-white' : 'text-neutral-400 hover:text-white'
             }`}
+            style={{ color: repeatMode !== 'off' ? posterColor.primary : undefined }}
             title={`Repeat: ${repeatMode}`}
           >
             {repeatMode === 'one' ? (
