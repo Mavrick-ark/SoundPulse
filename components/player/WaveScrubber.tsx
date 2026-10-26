@@ -120,18 +120,18 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
 
   const viewBoxWidth = 600;
   const viewBoxHeight = height;
-  const baseY = viewBoxHeight - 10;
+  const baseY = Math.round(viewBoxHeight / 2); // Exact vertical center of timeline
   const currentX = progressRatio * viewBoxWidth;
 
-  // Generate multi-strand undulating wave paths
+  // Generate multi-strand undulating wave paths centered on timeline baseline
   const { wavePath1, wavePath2, wavePath3 } = useMemo(() => {
     if (currentX <= 4) {
       return { wavePath1: '', wavePath2: '', wavePath3: '' };
     }
 
-    const maxAmp1 = isPlaying ? 9 : 4;
-    const maxAmp2 = isPlaying ? 6.5 : 2.5;
-    const maxAmp3 = isPlaying ? 4.5 : 1.5;
+    const maxAmp1 = isPlaying ? Math.min(7.5, baseY - 3) : 3.5;
+    const maxAmp2 = isPlaying ? Math.min(5.5, baseY - 4) : 2.5;
+    const maxAmp3 = isPlaying ? Math.min(3.8, baseY - 5) : 1.8;
 
     let p1 = `M 0 ${baseY}`;
     let p2 = `M 0 ${baseY}`;
@@ -142,12 +142,12 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
       const t = x / currentX;
       const envelope = Math.sin(t * Math.PI);
 
-      // Strand 1: Primary undulating crest
-      const y1 = baseY - Math.abs(Math.sin(x * 0.038 - phase)) * maxAmp1 * envelope;
+      // Strand 1: Primary undulating crest (sinusoidal above/below baseline)
+      const y1 = baseY - Math.sin(x * 0.038 - phase) * maxAmp1 * envelope;
       // Strand 2: Secondary offset wave ribbon (different frequency & phase)
-      const y2 = baseY - Math.abs(Math.sin(x * 0.046 - phase - 1.4)) * maxAmp2 * envelope;
+      const y2 = baseY - Math.sin(x * 0.046 - phase - 1.4) * maxAmp2 * envelope;
       // Strand 3: Tertiary accent wave ribbon
-      const y3 = baseY - Math.abs(Math.sin(x * 0.031 - phase - 2.8)) * maxAmp3 * envelope;
+      const y3 = baseY - Math.sin(x * 0.031 - phase - 2.8) * maxAmp3 * envelope;
 
       p1 += ` L ${x.toFixed(1)} ${y1.toFixed(1)}`;
       p2 += ` L ${x.toFixed(1)} ${y2.toFixed(1)}`;
@@ -257,12 +257,13 @@ export const WaveScrubber: React.FC<WaveScrubberProps> = ({
           )}
         </svg>
 
-        {/* 4. Google Material 3 Playhead Dot (Rendered in HTML to GUARANTEE 100% perfect circularity, never oval) */}
+        {/* 4. Google Material 3 Playhead Dot (Centered directly in the middle of the timeline rail) */}
         <div
-          className="absolute top-0 bottom-0 pointer-events-none transition-transform duration-75 flex items-center justify-center z-20"
+          className="absolute pointer-events-none transition-transform duration-75 flex items-center justify-center z-20"
           style={{
             left: `${progressRatio * 100}%`,
-            transform: 'translateX(-50%)',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
           }}
         >
           {/* Outer Translucent Halo Ring (Google-style smooth circular halo) */}

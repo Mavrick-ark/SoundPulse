@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '@/lib/store';
 import { resolveTrackDetails } from '@/lib/api';
 
@@ -42,6 +42,79 @@ export const AudioEngine: React.FC = () => {
   const intervalRef = useRef<any>(null);
   const lastSongIdRef = useRef<number | null>(null);
   const resolvingRef = useRef<boolean>(false);
+
+  // Web Audio API background audio session keeper
+  const webAudioCtxRef = useRef<AudioContext | null>(null);
+  const webAudioOscRef = useRef<OscillatorNode | null>(null);
+
+  const startAudioKeepAlive = useCallback(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!webAudioCtxRef.current) {
+        webAudioCtxRef.current = new AudioCtx();
+      }
+      if (webAudioCtxRef.current.state === 'suspended') {
+        webAudioCtxRef.current.resume();
+      }
+      if (!webAudioOscRef.current && webAudioCtxRef.current) {
+        const ctx = webAudioCtxRef.current;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        // Inaudible 20Hz tone at 0.0001 gain keeps Android OS AudioServer channel open in background
+        osc.frequency.setValueAtTime(20, ctx.currentTime);
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        webAudioOscRef.current = osc;
+      }
+    } catch (_) {}
+  }, []);
+
+  const stopAudioKeepAlive = useCallback(() => {
+    try {
+      if (webAudioOscRef.current) {
+        webAudioOscRef.current.stop();
+        webAudioOscRef.current.disconnect();
+        webAudioOscRef.current = null;
+      }
+      if (webAudioCtxRef.current && webAudioCtxRef.current.state === 'running') {
+        webAudioCtxRef.current.suspend();
+      }
+    } catch (_) {}
+  }, []);
+
+  // Auto-recover YouTube background playback on visibility change or app blur
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const playerState = usePlayerStore.getState();
+      if (playerState.isPlaying && ytPlayerRef.current?.playVideo) {
+        setTimeout(() => {
+          try {
+            ytPlayerRef.current?.playVideo?.();
+          } catch (_) {}
+        }, 100);
+        setTimeout(() => {
+          try {
+            ytPlayerRef.current?.playVideo?.();
+          } catch (_) {}
+        }, 400);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleVisibilityChange);
+    window.addEventListener('pagehide', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleVisibilityChange);
+    };
+  }, []);
 
   // Initialize YouTube Iframe API
   useEffect(() => {
@@ -97,6 +170,16 @@ export const AudioEngine: React.FC = () => {
                   try {
                     ytPlayerRef.current?.stopVideo?.();
                   } catch (_) {}
+                }
+              } else if (event.data === 2) {
+                // 2 = PAUSED. If user wants playing but browser auto-paused due to backgrounding, auto-resume!
+                const playerState = usePlayerStore.getState();
+                if (playerState.isPlaying && (document.hidden || !document.hasFocus())) {
+                  setTimeout(() => {
+                    try {
+                      ytPlayerRef.current?.playVideo?.();
+                    } catch (_) {}
+                  }, 100);
                 }
               }
             },
@@ -346,6 +429,12 @@ export const AudioEngine: React.FC = () => {
     );
 
     // Background Keep-Alive Audio: maintains active audio session in mobile OS when minimized
+    if (isPlaying) {
+      startAudioKeepAlive();
+    } else {
+      stopAudioKeepAlive();
+    }
+
     if (bgKeepAliveAudioRef.current) {
       if (isPlaying) {
         bgKeepAliveAudioRef.current.play().catch(() => {});
@@ -488,10 +577,10 @@ export const AudioEngine: React.FC = () => {
         className="hidden pointer-events-none"
       />
 
-      {/* Persistent YouTube Player Container for Full-Length YouTube Streaming */}
+      {/* Persistent YouTube Player Container: kept on-screen inside viewport to prevent mobile browser throttling */}
       <div
         id="soundpulse-persistent-yt-iframe"
-        className="pointer-events-none fixed -bottom-20 -right-20 w-4 h-4 opacity-0 z-0"
+        className="pointer-events-none fixed bottom-0 right-0 w-[2px] h-[2px] opacity-[0.002] z-[-1] overflow-hidden"
       />
     </>
   );
