@@ -319,6 +319,40 @@ export const AudioEngine: React.FC = () => {
     }
   }, [currentTime, duration]);
 
+  // 5. Native Android Foreground Service Bridge (Lock Screen Notification Controls & WakeLock)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    (window as any).__soundpulse_media_action = (action: string) => {
+      try {
+        if (action === 'play') {
+          resume();
+        } else if (action === 'pause') {
+          pause();
+        } else if (action === 'next') {
+          nextSong();
+        } else if (action === 'prev') {
+          prevSong();
+        }
+      } catch (err) {
+        console.warn('Native media action failed:', err);
+      }
+    };
+
+    const nativeBridge = (window as any).NativeAudioBridge;
+    if (nativeBridge) {
+      if (currentSong) {
+        nativeBridge.notifyPlayback(
+          currentSong.song_name || 'SoundPulse Music',
+          currentSong.artist_name || 'SoundPulse',
+          isPlaying
+        );
+      } else {
+        nativeBridge.stopPlayback();
+      }
+    }
+  }, [currentSong, isPlaying, resume, pause, nextSong, prevSong]);
+
   // Handle Song Change & Auto-Resolve Full Tracks and Lyrics
   useEffect(() => {
     if (!currentSong) return;
