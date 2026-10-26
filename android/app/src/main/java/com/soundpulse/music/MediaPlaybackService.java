@@ -8,6 +8,11 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
+import android.media.session.MediaSession;
+import android.media.session.PlaybackState;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
@@ -27,6 +32,10 @@ public class MediaPlaybackService extends Service {
 
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
+    private AudioManager audioManager;
+    private AudioFocusRequest audioFocusRequest;
+    private MediaSession mediaSession;
+
     private String currentTitle = "SoundPulse Music";
     private String currentArtist = "Playing in Background";
     private boolean isPlaying = false;
@@ -35,6 +44,7 @@ public class MediaPlaybackService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        setupMediaSession();
         acquireLocks();
     }
 
@@ -55,17 +65,135 @@ public class MediaPlaybackService extends Service {
         }
     }
 
+    private void setupMediaSession() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                mediaSession = new MediaSession(this, "SoundPulseSession");
+                mediaSession.setCallback(new MediaSession.Callback() {
+                    @Override
+                    public void onPlay() {
+                        isPlaying = true;
+                        acquireLocks();
+                        requestAudioFocus();
+                        updateNotification();
+                        MainActivity.dispatchMediaAction("play");
+                    }
+
+                    @Override
+                    public void onPause() {
+                        isPlaying = false;
+                        updateNotification();
+                        MainActivity.dispatchMediaAction("pause");
+                    }
+
+                    @Override
+                    public void onSkipToNext() {
+                        MainActivity.dispatchMediaAction("next");
+                    }
+
+                    @Override
+                    public void onSkipToPrevious() {
+                        MainActivity.dispatchMediaAction("prev");
+                    }
+
+                    @Override
+                    public void onStop() {
+                        isPlaying = false;
+                        updateNotification();
+                        MainActivity.dispatchMediaAction("pause");
+                    }
+                });
+                mediaSession.setFlags(
+                    MediaSession.FLAG_HANDLES_MEDIA_BUTTONS |
+                    MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
+                );
+                mediaSession.setActive(true);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void updateMediaSessionState(boolean playing) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && mediaSession != null) {
+            try {
+                PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
+                    .setActions(
+                        PlaybackState.ACTION_PLAY |
+                        PlaybackState.ACTION_PAUSE |
+                        PlaybackState.ACTION_SKIP_TO_NEXT |
+                        PlaybackState.ACTION_SKIP_TO_PREVIOUS |
+                        PlaybackState.ACTION_PLAY_PAUSE |
+                        PlaybackState.ACTION_STOP
+                    )
+                    .setState(
+                        playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
+                        PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                        1.0f
+                    );
+                mediaSession.setPlaybackState(stateBuilder.build());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void requestAudioFocus() {
+        try {
+            audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (audioManager != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build();
+                    audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                        .setAudioAttributes(playbackAttributes)
+                        .setAcceptsDelayedFocusGain(true)
+                        .setOnAudioFocusChangeListener(new AudioManager.OnAudioFocusChangeListener() {
+                            @Override
+                            public void onAudioFocusChange(int focusChange) {
+                                // Keep focus active
+                            }
+                        })
+                        .build();
+                    audioManager.requestAudioFocus(audioFocusRequest);
+                } else {
+                    audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void abandonAudioFocus() {
+        try {
+            if (audioManager != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+                    audioManager.abandonAudioFocusRequest(audioFocusRequest);
+                } else {
+                    audioManager.abandonAudioFocus(null);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private void acquireLocks() {
         try {
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null && (wakeLock == null || !wakeLock.isHeld())) {
                 wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SoundPulse::PlaybackWakeLock");
+                wakeLock.setReferenceCounted(false);
                 wakeLock.acquire();
             }
 
             WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             if (wm != null && (wifiLock == null || !wifiLock.isHeld())) {
                 wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "SoundPulse::PlaybackWifiLock");
+                wifiLock.setReferenceCounted(false);
                 wifiLock.acquire();
             }
         } catch (Exception e) {
@@ -104,17 +232,22 @@ public class MediaPlaybackService extends Service {
                 isPlaying = intent.getBooleanExtra("isPlaying", false);
                 if (isPlaying) {
                     acquireLocks();
+                    requestAudioFocus();
                 } else {
                     releaseLocks();
                 }
+                updateMediaSessionState(isPlaying);
             } else if (ACTION_PLAY.equals(action)) {
                 isPlaying = true;
                 acquireLocks();
+                requestAudioFocus();
+                updateMediaSessionState(true);
                 updateNotification();
                 MainActivity.dispatchMediaAction("play");
             } else if (ACTION_PAUSE.equals(action)) {
                 isPlaying = false;
                 releaseLocks();
+                updateMediaSessionState(false);
                 updateNotification();
                 MainActivity.dispatchMediaAction("pause");
             } else if (ACTION_NEXT.equals(action)) {
@@ -124,6 +257,11 @@ public class MediaPlaybackService extends Service {
             } else if (ACTION_STOP.equals(action)) {
                 isPlaying = false;
                 releaseLocks();
+                abandonAudioFocus();
+                updateMediaSessionState(false);
+                if (mediaSession != null) {
+                    mediaSession.setActive(false);
+                }
                 stopForeground(true);
                 stopSelf();
                 return START_NOT_STICKY;
@@ -196,6 +334,12 @@ public class MediaPlaybackService extends Service {
     @Override
     public void onDestroy() {
         releaseLocks();
+        abandonAudioFocus();
+        if (mediaSession != null) {
+            mediaSession.setActive(false);
+            mediaSession.release();
+            mediaSession = null;
+        }
         super.onDestroy();
     }
 

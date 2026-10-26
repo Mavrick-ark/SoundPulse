@@ -134,8 +134,8 @@ export const AudioEngine: React.FC = () => {
     function initYTPlayer() {
       try {
         ytPlayerRef.current = new window.YT.Player('soundpulse-persistent-yt-iframe', {
-          height: '10',
-          width: '10',
+          height: '64',
+          width: '64',
           playerVars: {
             autoplay: 1,
             controls: 0,
@@ -172,14 +172,20 @@ export const AudioEngine: React.FC = () => {
                   } catch (_) {}
                 }
               } else if (event.data === 2) {
-                // 2 = PAUSED. If user wants playing but browser auto-paused due to backgrounding, auto-resume!
+                // 2 = PAUSED. If Zustand store says isPlaying, YouTube was suspended by screen lock or OS event!
+                // Auto-resume immediately!
                 const playerState = usePlayerStore.getState();
-                if (playerState.isPlaying && (document.hidden || !document.hasFocus())) {
+                if (playerState.isPlaying) {
                   setTimeout(() => {
                     try {
                       ytPlayerRef.current?.playVideo?.();
                     } catch (_) {}
-                  }, 100);
+                  }, 50);
+                  setTimeout(() => {
+                    try {
+                      ytPlayerRef.current?.playVideo?.();
+                    } catch (_) {}
+                  }, 250);
                 }
               }
             },
@@ -537,6 +543,12 @@ export const AudioEngine: React.FC = () => {
           }
         } else if (currentSong?.youtube_id && ytPlayerRef.current?.getCurrentTime) {
           try {
+            // Background Watchdog: If store says playing but YouTube paused due to lock screen, auto-resume
+            const pState = ytPlayerRef.current.getPlayerState?.();
+            if (pState === 2) {
+              ytPlayerRef.current.playVideo?.();
+            }
+
             const t = ytPlayerRef.current.getCurrentTime();
             if (typeof t === 'number' && !isNaN(t)) {
               setCurrentTime(t);
@@ -611,10 +623,10 @@ export const AudioEngine: React.FC = () => {
         className="hidden pointer-events-none"
       />
 
-      {/* Persistent YouTube Player Container: kept on-screen inside viewport to prevent mobile browser throttling */}
+      {/* Persistent YouTube Player Container: sized to 64x64 so Chromium assigns a composited video layer */}
       <div
         id="soundpulse-persistent-yt-iframe"
-        className="pointer-events-none fixed bottom-0 right-0 w-[2px] h-[2px] opacity-[0.002] z-[-1] overflow-hidden"
+        className="pointer-events-none fixed bottom-0 right-0 w-16 h-16 opacity-[0.01] z-0 overflow-hidden"
       />
     </>
   );

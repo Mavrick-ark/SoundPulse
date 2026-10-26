@@ -27,6 +27,16 @@ public class MainActivity extends BridgeActivity {
             settings.setJavaScriptCanOpenWindowsAutomatically(true);
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
+            settings.setAllowFileAccess(true);
+            settings.setAllowContentAccess(true);
+
+            // Strip "Mobile Safari" to mimic desktop browser and avoid mobile YouTube sleep heuristics
+            try {
+                String ua = settings.getUserAgentString();
+                if (ua != null && ua.contains("Mobile")) {
+                    settings.setUserAgentString(ua.replace("Mobile Safari", "Safari"));
+                }
+            } catch (Exception e) {}
 
             webView.addJavascriptInterface(new AudioBridge(), "NativeAudioBridge");
         }
@@ -43,8 +53,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onPause() {
         super.onPause();
-        // Keep JavaScript audio loop and timers active when app is minimized or backgrounded
+        // Prevent Capacitor from suspending WebView audio decoders & JavaScript timers
         if (bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().onResume();
             bridge.getWebView().resumeTimers();
         }
     }
@@ -53,6 +64,7 @@ public class MainActivity extends BridgeActivity {
     public void onStop() {
         super.onStop();
         if (bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().onResume();
             bridge.getWebView().resumeTimers();
         }
     }
