@@ -10,18 +10,16 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
+import android.media.AudioFormat;
 import android.media.AudioManager;
-import android.media.MediaPlayer;
+import android.media.AudioTrack;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
-import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import androidx.core.app.NotificationCompat;
-import java.util.HashMap;
-import java.util.Map;
 
 public class MediaPlaybackService extends Service {
     public static final String CHANNEL_ID = "soundpulse_media_playback";
@@ -33,56 +31,21 @@ public class MediaPlaybackService extends Service {
     public static final String ACTION_PREV = "com.soundpulse.music.ACTION_PREV";
     public static final String ACTION_STOP = "com.soundpulse.music.ACTION_STOP";
     public static final String ACTION_UPDATE_STATE = "com.soundpulse.music.ACTION_UPDATE_STATE";
-    public static final String ACTION_PLAY_TRACK = "com.soundpulse.music.ACTION_PLAY_TRACK";
-
-    private static MediaPlaybackService instance;
 
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
     private AudioManager audioManager;
     private AudioFocusRequest audioFocusRequest;
     private MediaSession mediaSession;
-    private MediaPlayer mediaPlayer;
+    private AudioTrack silentAudioTrack;
 
     private String currentTitle = "SoundPulse Music";
     private String currentArtist = "Ready to Play";
-    private String currentVideoId = "";
     private boolean isPlaying = false;
-
-    public static MediaPlaybackService getInstance() {
-        return instance;
-    }
-
-    public int getCurrentPosition() {
-        try {
-            if (mediaPlayer != null) {
-                return mediaPlayer.getCurrentPosition();
-            }
-        } catch (Exception e) {}
-        return 0;
-    }
-
-    public int getDuration() {
-        try {
-            if (mediaPlayer != null) {
-                return mediaPlayer.getDuration();
-            }
-        } catch (Exception e) {}
-        return 0;
-    }
-
-    public void seekTo(int positionMs) {
-        try {
-            if (mediaPlayer != null) {
-                mediaPlayer.seekTo(positionMs);
-            }
-        } catch (Exception e) {}
-    }
 
     @Override
     public void onCreate() {
         super.onCreate();
-        instance = this;
         createNotificationChannel();
         setupMediaSession();
         acquireLocks();
@@ -112,12 +75,22 @@ public class MediaPlaybackService extends Service {
                 mediaSession.setCallback(new MediaSession.Callback() {
                     @Override
                     public void onPlay() {
-                        resumePlayback();
+                        isPlaying = true;
+                        acquireLocks();
+                        requestAudioFocus();
+                        startNativeAudioKeepAlive();
+                        updateNotification();
+                        updateMediaSessionState(true);
+                        MainActivity.dispatchMediaAction("play");
                     }
 
                     @Override
                     public void onPause() {
-                        pausePlayback();
+                        isPlaying = false;
+                        stopNativeAudioKeepAlive();
+                        updateNotification();
+                        updateMediaSessionState(false);
+                        MainActivity.dispatchMediaAction("pause");
                     }
 
                     @Override
@@ -132,7 +105,11 @@ public class MediaPlaybackService extends Service {
 
                     @Override
                     public void onStop() {
-                        pausePlayback();
+                        isPlaying = false;
+                        stopNativeAudioKeepAlive();
+                        updateNotification();
+                        updateMediaSessionState(false);
+                        MainActivity.dispatchMediaAction("pause");
                     }
                 });
                 mediaSession.setFlags(
@@ -160,7 +137,7 @@ public class MediaPlaybackService extends Service {
                     )
                     .setState(
                         playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-                        getCurrentPosition(),
+                        PlaybackState.PLAYBACK_POSITION_UNKNOWN,
                         1.0f
                     );
                 mediaSession.setPlaybackState(stateBuilder.build());
@@ -185,9 +162,7 @@ public class MediaPlaybackService extends Service {
                         .setOnAudioFocusChangeListener(new AudioManager.OnAudioFocusChangeListener() {
                             @Override
                             public void onAudioFocusChange(int focusChange) {
-                                if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
-                                    pausePlayback();
-                                }
+                                // Maintain active focus
                             }
                         })
                         .build();
@@ -250,109 +225,71 @@ public class MediaPlaybackService extends Service {
         }
     }
 
-    public void playNativeTrack(final String title, final String artist, final String youtubeId, final String audioUrl) {
-        currentTitle = title;
-        currentArtist = artist;
-        currentVideoId = youtubeId != null ? youtubeId : "";
-        isPlaying = true;
-        acquireLocks();
-        requestAudioFocus();
-        updateNotification();
-        updateMediaSessionState(true);
+    private void startNativeAudioKeepAlive() {
+        try {
+            if (silentAudioTrack == null) {
+                int sampleRate = 44100;
+                int bufferSize = AudioTrack.getMinBufferSize(
+                    sampleRate,
+                    AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                );
+                if (bufferSize <= 0) bufferSize = 4096;
 
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    String streamUrl = audioUrl;
-                    if (streamUrl == null || streamUrl.isEmpty() || !streamUrl.startsWith("http")) {
-                        if (youtubeId != null && !youtubeId.isEmpty()) {
-                            streamUrl = NativeStreamExtractor.getAudioStreamUrl(youtubeId);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    silentAudioTrack = new AudioTrack.Builder()
+                        .setAudioAttributes(new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build())
+                        .setAudioFormat(new AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build())
+                        .setBufferSizeInBytes(bufferSize)
+                        .setTransferMode(AudioTrack.MODE_STREAM)
+                        .build();
+                } else {
+                    silentAudioTrack = new AudioTrack(
+                        AudioManager.STREAM_MUSIC,
+                        sampleRate,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        bufferSize,
+                        AudioTrack.MODE_STREAM
+                    );
+                }
+
+                silentAudioTrack.play();
+                final byte[] silentBuffer = new byte[bufferSize];
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        while (isPlaying && silentAudioTrack != null) {
+                            try {
+                                silentAudioTrack.write(silentBuffer, 0, silentBuffer.length);
+                                Thread.sleep(150);
+                            } catch (Exception e) {
+                                break;
+                            }
                         }
                     }
-
-                    if (streamUrl != null && !streamUrl.isEmpty()) {
-                        initMediaPlayer(streamUrl);
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                }).start();
             }
-        }).start();
-    }
-
-    private void initMediaPlayer(String streamUrl) {
-        try {
-            if (mediaPlayer == null) {
-                mediaPlayer = new MediaPlayer();
-                mediaPlayer.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
-            } else {
-                mediaPlayer.reset();
-            }
-
-            mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build());
-
-            Map<String, String> headers = new HashMap<>();
-            headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0");
-            mediaPlayer.setDataSource(getApplicationContext(), Uri.parse(streamUrl), headers);
-
-            mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                @Override
-                public void onPrepared(MediaPlayer mp) {
-                    mp.start();
-                    isPlaying = true;
-                    updateNotification();
-                    updateMediaSessionState(true);
-                }
-            });
-
-            mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                @Override
-                public void onCompletion(MediaPlayer mp) {
-                    MainActivity.dispatchMediaAction("next");
-                }
-            });
-
-            mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
-                @Override
-                public boolean onError(MediaPlayer mp, int what, int extra) {
-                    return true;
-                }
-            });
-
-            mediaPlayer.prepareAsync();
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    public void pausePlayback() {
-        isPlaying = false;
+    private void stopNativeAudioKeepAlive() {
         try {
-            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-                mediaPlayer.pause();
+            if (silentAudioTrack != null) {
+                silentAudioTrack.stop();
+                silentAudioTrack.release();
+                silentAudioTrack = null;
             }
         } catch (Exception e) {}
-        updateNotification();
-        updateMediaSessionState(false);
-        MainActivity.dispatchMediaAction("pause");
-    }
-
-    public void resumePlayback() {
-        isPlaying = true;
-        acquireLocks();
-        requestAudioFocus();
-        try {
-            if (mediaPlayer != null) {
-                mediaPlayer.start();
-            }
-        } catch (Exception e) {}
-        updateNotification();
-        updateMediaSessionState(true);
-        MainActivity.dispatchMediaAction("play");
     }
 
     @Override
@@ -360,31 +297,48 @@ public class MediaPlaybackService extends Service {
         if (intent != null) {
             String action = intent.getAction();
 
-            if (ACTION_PLAY_TRACK.equals(action)) {
-                String title = intent.getStringExtra("title");
-                String artist = intent.getStringExtra("artist");
-                String youtubeId = intent.getStringExtra("youtubeId");
-                String audioUrl = intent.getStringExtra("audioUrl");
-                playNativeTrack(title, artist, youtubeId, audioUrl);
+            if (intent.hasExtra("title")) {
+                currentTitle = intent.getStringExtra("title");
+            }
+            if (intent.hasExtra("artist")) {
+                currentArtist = intent.getStringExtra("artist");
+            }
+
+            if (ACTION_UPDATE_STATE.equals(action)) {
+                isPlaying = intent.getBooleanExtra("isPlaying", false);
+                if (isPlaying) {
+                    acquireLocks();
+                    requestAudioFocus();
+                    startNativeAudioKeepAlive();
+                } else {
+                    releaseLocks();
+                    stopNativeAudioKeepAlive();
+                }
+                updateMediaSessionState(isPlaying);
             } else if (ACTION_PLAY.equals(action)) {
-                resumePlayback();
+                isPlaying = true;
+                acquireLocks();
+                requestAudioFocus();
+                startNativeAudioKeepAlive();
+                updateMediaSessionState(true);
+                updateNotification();
+                MainActivity.dispatchMediaAction("play");
             } else if (ACTION_PAUSE.equals(action)) {
-                pausePlayback();
+                isPlaying = false;
+                releaseLocks();
+                stopNativeAudioKeepAlive();
+                updateMediaSessionState(false);
+                updateNotification();
+                MainActivity.dispatchMediaAction("pause");
             } else if (ACTION_NEXT.equals(action)) {
                 MainActivity.dispatchMediaAction("next");
             } else if (ACTION_PREV.equals(action)) {
                 MainActivity.dispatchMediaAction("prev");
             } else if (ACTION_STOP.equals(action)) {
                 isPlaying = false;
-                try {
-                    if (mediaPlayer != null) {
-                        mediaPlayer.stop();
-                        mediaPlayer.release();
-                        mediaPlayer = null;
-                    }
-                } catch (Exception e) {}
                 releaseLocks();
                 abandonAudioFocus();
+                stopNativeAudioKeepAlive();
                 updateMediaSessionState(false);
                 if (mediaSession != null) {
                     mediaSession.setActive(false);
@@ -460,18 +414,9 @@ public class MediaPlaybackService extends Service {
 
     @Override
     public void onDestroy() {
-        if (instance == this) {
-            instance = null;
-        }
-        try {
-            if (mediaPlayer != null) {
-                mediaPlayer.stop();
-                mediaPlayer.release();
-                mediaPlayer = null;
-            }
-        } catch (Exception e) {}
         releaseLocks();
         abandonAudioFocus();
+        stopNativeAudioKeepAlive();
         if (mediaSession != null) {
             mediaSession.setActive(false);
             mediaSession.release();

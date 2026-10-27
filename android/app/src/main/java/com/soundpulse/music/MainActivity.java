@@ -90,14 +90,13 @@ public class MainActivity extends BridgeActivity {
 
     public class AudioBridge {
         @JavascriptInterface
-        public void playTrack(String title, String artist, String youtubeId, String audioUrl) {
+        public void notifyPlayback(String title, String artist, boolean isPlaying) {
             try {
                 Intent intent = new Intent(MainActivity.this, MediaPlaybackService.class);
-                intent.setAction(MediaPlaybackService.ACTION_PLAY_TRACK);
+                intent.setAction(MediaPlaybackService.ACTION_UPDATE_STATE);
                 intent.putExtra("title", title);
                 intent.putExtra("artist", artist);
-                intent.putExtra("youtubeId", youtubeId);
-                intent.putExtra("audioUrl", audioUrl);
+                intent.putExtra("isPlaying", isPlaying);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(intent);
                 } else {
@@ -109,44 +108,13 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
-        public void pauseTrack() {
+        public void stopPlayback() {
             try {
                 Intent intent = new Intent(MainActivity.this, MediaPlaybackService.class);
-                intent.setAction(MediaPlaybackService.ACTION_PAUSE);
+                intent.setAction(MediaPlaybackService.ACTION_STOP);
                 startService(intent);
             } catch (Exception e) {
                 e.printStackTrace();
-            }
-        }
-
-        @JavascriptInterface
-        public void resumeTrack() {
-            try {
-                Intent intent = new Intent(MainActivity.this, MediaPlaybackService.class);
-                intent.setAction(MediaPlaybackService.ACTION_PLAY);
-                startService(intent);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        @JavascriptInterface
-        public int getCurrentPosition() {
-            MediaPlaybackService s = MediaPlaybackService.getInstance();
-            return s != null ? s.getCurrentPosition() : 0;
-        }
-
-        @JavascriptInterface
-        public int getDuration() {
-            MediaPlaybackService s = MediaPlaybackService.getInstance();
-            return s != null ? s.getDuration() : 0;
-        }
-
-        @JavascriptInterface
-        public void seekTo(int positionMs) {
-            MediaPlaybackService s = MediaPlaybackService.getInstance();
-            if (s != null) {
-                s.seekTo(positionMs);
             }
         }
     }

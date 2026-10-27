@@ -352,15 +352,14 @@ export const AudioEngine: React.FC = () => {
 
     const nativeBridge = (window as any).NativeAudioBridge;
     if (nativeBridge) {
-      if (currentSong && isPlaying) {
-        nativeBridge.playTrack(
+      if (currentSong) {
+        nativeBridge.notifyPlayback(
           currentSong.song_name || 'SoundPulse Music',
           currentSong.artist_name || 'SoundPulse',
-          currentSong.youtube_id || '',
-          currentSong.audio_url || ''
+          isPlaying
         );
-      } else if (currentSong && !isPlaying) {
-        nativeBridge.pauseTrack();
+      } else {
+        nativeBridge.stopPlayback();
       }
     }
   }, [currentSong, isPlaying, resume, pause, nextSong, prevSong]);
@@ -405,8 +404,7 @@ export const AudioEngine: React.FC = () => {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
-      if (!nativeBridge && isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
+      if (isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
         try {
           ytPlayerRef.current.loadVideoById(currentSong.youtube_id);
           if (!isPlaying) {
@@ -450,8 +448,7 @@ export const AudioEngine: React.FC = () => {
               audioRef.current.pause();
             }
 
-            const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
-            if (!nativeBridge && isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
+            if (isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
               ytPlayerRef.current.loadVideoById(res.youtube_id);
               if (!isPlaying) {
                 ytPlayerRef.current.pauseVideo();
@@ -536,21 +533,6 @@ export const AudioEngine: React.FC = () => {
 
     if (isPlaying) {
       intervalRef.current = setInterval(() => {
-        const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
-        if (nativeBridge?.getCurrentPosition) {
-          try {
-            const posMs = nativeBridge.getCurrentPosition();
-            const durMs = nativeBridge.getDuration();
-            if (durMs > 0) {
-              setDuration(durMs / 1000);
-            }
-            if (typeof posMs === 'number' && posMs >= 0) {
-              setCurrentTime(posMs / 1000);
-            }
-          } catch (_) {}
-          return;
-        }
-
         const isLocalTrack = Boolean(
           currentSong?.audio_url &&
             (currentSong.audio_url.startsWith('/uploads') ||
