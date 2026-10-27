@@ -208,7 +208,12 @@ export const AudioEngine: React.FC = () => {
   useEffect(() => {
     if (seekTarget === null) return;
 
-    if (currentSong?.audio_url && audioRef.current) {
+    const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
+    if (nativeBridge?.seekTo) {
+      try {
+        nativeBridge.seekTo(Math.round(seekTarget * 1000));
+      } catch (_) {}
+    } else if (currentSong?.audio_url && audioRef.current) {
       audioRef.current.currentTime = seekTarget;
     } else if (currentSong?.youtube_id && ytPlayerRef.current?.seekTo) {
       try {
@@ -347,14 +352,15 @@ export const AudioEngine: React.FC = () => {
 
     const nativeBridge = (window as any).NativeAudioBridge;
     if (nativeBridge) {
-      if (currentSong) {
-        nativeBridge.notifyPlayback(
+      if (currentSong && isPlaying) {
+        nativeBridge.playTrack(
           currentSong.song_name || 'SoundPulse Music',
           currentSong.artist_name || 'SoundPulse',
-          isPlaying
+          currentSong.youtube_id || '',
+          currentSong.audio_url || ''
         );
-      } else {
-        nativeBridge.stopPlayback();
+      } else if (currentSong && !isPlaying) {
+        nativeBridge.pauseTrack();
       }
     }
   }, [currentSong, isPlaying, resume, pause, nextSong, prevSong]);
@@ -399,7 +405,8 @@ export const AudioEngine: React.FC = () => {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      if (isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
+      const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
+      if (!nativeBridge && isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
         try {
           ytPlayerRef.current.loadVideoById(currentSong.youtube_id);
           if (!isPlaying) {
@@ -443,7 +450,8 @@ export const AudioEngine: React.FC = () => {
               audioRef.current.pause();
             }
 
-            if (isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
+            const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
+            if (!nativeBridge && isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
               ytPlayerRef.current.loadVideoById(res.youtube_id);
               if (!isPlaying) {
                 ytPlayerRef.current.pauseVideo();
@@ -528,6 +536,21 @@ export const AudioEngine: React.FC = () => {
 
     if (isPlaying) {
       intervalRef.current = setInterval(() => {
+        const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
+        if (nativeBridge?.getCurrentPosition) {
+          try {
+            const posMs = nativeBridge.getCurrentPosition();
+            const durMs = nativeBridge.getDuration();
+            if (durMs > 0) {
+              setDuration(durMs / 1000);
+            }
+            if (typeof posMs === 'number' && posMs >= 0) {
+              setCurrentTime(posMs / 1000);
+            }
+          } catch (_) {}
+          return;
+        }
+
         const isLocalTrack = Boolean(
           currentSong?.audio_url &&
             (currentSong.audio_url.startsWith('/uploads') ||

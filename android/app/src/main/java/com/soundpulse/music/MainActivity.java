@@ -30,7 +30,7 @@ public class MainActivity extends BridgeActivity {
             settings.setAllowFileAccess(true);
             settings.setAllowContentAccess(true);
 
-            // Strip "Mobile Safari" to mimic desktop browser and avoid mobile YouTube sleep heuristics
+            // Strip "Mobile Safari" to avoid mobile sleep heuristics
             try {
                 String ua = settings.getUserAgentString();
                 if (ua != null && ua.contains("Mobile")) {
@@ -53,7 +53,6 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onPause() {
         super.onPause();
-        // Prevent Capacitor from suspending WebView audio decoders & JavaScript timers
         if (bridge != null && bridge.getWebView() != null) {
             bridge.getWebView().onResume();
             bridge.getWebView().resumeTimers();
@@ -91,13 +90,14 @@ public class MainActivity extends BridgeActivity {
 
     public class AudioBridge {
         @JavascriptInterface
-        public void notifyPlayback(String title, String artist, boolean isPlaying) {
+        public void playTrack(String title, String artist, String youtubeId, String audioUrl) {
             try {
                 Intent intent = new Intent(MainActivity.this, MediaPlaybackService.class);
-                intent.setAction(MediaPlaybackService.ACTION_UPDATE_STATE);
+                intent.setAction(MediaPlaybackService.ACTION_PLAY_TRACK);
                 intent.putExtra("title", title);
                 intent.putExtra("artist", artist);
-                intent.putExtra("isPlaying", isPlaying);
+                intent.putExtra("youtubeId", youtubeId);
+                intent.putExtra("audioUrl", audioUrl);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(intent);
                 } else {
@@ -109,13 +109,44 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
-        public void stopPlayback() {
+        public void pauseTrack() {
             try {
                 Intent intent = new Intent(MainActivity.this, MediaPlaybackService.class);
-                intent.setAction(MediaPlaybackService.ACTION_STOP);
+                intent.setAction(MediaPlaybackService.ACTION_PAUSE);
                 startService(intent);
             } catch (Exception e) {
                 e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void resumeTrack() {
+            try {
+                Intent intent = new Intent(MainActivity.this, MediaPlaybackService.class);
+                intent.setAction(MediaPlaybackService.ACTION_PLAY);
+                startService(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public int getCurrentPosition() {
+            MediaPlaybackService s = MediaPlaybackService.getInstance();
+            return s != null ? s.getCurrentPosition() : 0;
+        }
+
+        @JavascriptInterface
+        public int getDuration() {
+            MediaPlaybackService s = MediaPlaybackService.getInstance();
+            return s != null ? s.getDuration() : 0;
+        }
+
+        @JavascriptInterface
+        public void seekTo(int positionMs) {
+            MediaPlaybackService s = MediaPlaybackService.getInstance();
+            if (s != null) {
+                s.seekTo(positionMs);
             }
         }
     }
