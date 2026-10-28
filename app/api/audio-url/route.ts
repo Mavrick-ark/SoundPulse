@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Ytdl } from '@distube/ytdl-core';
+import { Client, Ytdl } from '@distube/ytdl-core';
 
 export const dynamic = 'force-dynamic';
 
-const ytdl = new Ytdl();
+const ytdl = new Ytdl({ clients: [Client.VisionOS] });
 const cache = new Map<string, { url: string; expires: number; duration: number }>();
 
 export async function GET(req: NextRequest) {
