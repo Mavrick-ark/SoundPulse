@@ -209,11 +209,17 @@ export const AudioEngine: React.FC = () => {
     if (seekTarget === null) return;
 
     const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
-    if (nativeBridge?.seekTo) {
+    if (nativeBridge?.seekStream) {
+      try {
+        nativeBridge.seekStream(seekTarget);
+      } catch (_) {}
+    } else if (nativeBridge?.seekTo) {
       try {
         nativeBridge.seekTo(Math.round(seekTarget * 1000));
       } catch (_) {}
-    } else if (currentSong?.audio_url && audioRef.current) {
+    }
+
+    if (currentSong?.audio_url && audioRef.current) {
       audioRef.current.currentTime = seekTarget;
     } else if (currentSong?.youtube_id && ytPlayerRef.current?.seekTo) {
       try {
@@ -344,9 +350,23 @@ export const AudioEngine: React.FC = () => {
           nextSong();
         } else if (action === 'prev') {
           prevSong();
+        } else if (action.startsWith('seek:')) {
+          const s = parseFloat(action.replace('seek:', ''));
+          if (!isNaN(s)) {
+            setCurrentTime(s);
+          }
         }
       } catch (err) {
         console.warn('Native media action failed:', err);
+      }
+    };
+
+    (window as any).__soundpulse_time_update = (cur: number, dur: number) => {
+      if (typeof cur === 'number' && !isNaN(cur)) {
+        setCurrentTime(cur);
+      }
+      if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
+        setDuration(dur);
       }
     };
 
@@ -377,18 +397,25 @@ export const AudioEngine: React.FC = () => {
       setDuration(currentSong.duration);
     }
 
-    const isLocalTrack = Boolean(
-      currentSong.audio_url &&
-        (currentSong.audio_url.startsWith('/uploads') ||
-          currentSong.audio_url.startsWith('blob:') ||
-          currentSong.audio_url.includes('127.0.0.1'))
-    );
+    const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
 
-    // 1. Play local lossless track via HTML5 Audio
-    if (isLocalTrack && currentSong.audio_url) {
+    // 1. Play track via Native MediaPlayer or HTML5 Audio whenever audio_url exists
+    if (currentSong.audio_url) {
       if (ytPlayerRef.current?.stopVideo) {
         try { ytPlayerRef.current.stopVideo(); } catch (_) {}
       }
+
+      if (nativeBridge?.playStream) {
+        try {
+          nativeBridge.playStream(
+            currentSong.audio_url,
+            currentSong.song_name || 'SoundPulse Music',
+            currentSong.artist_name || 'SoundPulse',
+            0
+          );
+        } catch (_) {}
+      }
+
       if (audioRef.current) {
         audioRef.current.src = currentSong.audio_url;
         audioRef.current.currentTime = 0;
@@ -396,17 +423,30 @@ export const AudioEngine: React.FC = () => {
           audioRef.current.play().catch((e) => console.warn('Audio play prevented:', e));
         }
       }
+
+      // If missing synced lyrics, fetch them in background
+      if (!currentSong.synced_lyrics) {
+        resolveTrackDetails(currentSong.song_name, currentSong.artist_name).then((res) => {
+          if (res?.synced_lyrics || res?.lyrics) {
+            updateCurrentSong({
+              synced_lyrics: res.synced_lyrics,
+              lyrics: res.lyrics,
+            });
+          }
+        });
+      }
       return;
     }
 
-    // 2. Play existing YouTube Track
+    // 2. Play existing YouTube Track & Asynchronously resolve direct audio stream for background playback
     if (currentSong.youtube_id) {
+      const ytId = currentSong.youtube_id;
       if (audioRef.current) {
         audioRef.current.pause();
       }
       if (isYtReadyRef.current && ytPlayerRef.current?.loadVideoById) {
         try {
-          ytPlayerRef.current.loadVideoById(currentSong.youtube_id);
+          ytPlayerRef.current.loadVideoById(ytId);
           if (!isPlaying) {
             ytPlayerRef.current.pauseVideo();
           }
@@ -414,6 +454,28 @@ export const AudioEngine: React.FC = () => {
           console.warn('YT loadVideoById error:', e);
         }
       }
+
+      // Asynchronously fetch direct audio URL for seamless background playback
+      fetch(`/api/audio-url?id=${ytId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.url) {
+            updateCurrentSong({
+              audio_url: data.url,
+              duration: data.duration || currentSong.duration,
+            });
+          } else {
+            updateCurrentSong({
+              audio_url: `/api/audio-stream?id=${ytId}`,
+            });
+          }
+        })
+        .catch(() => {
+          updateCurrentSong({
+            audio_url: `/api/audio-stream?id=${ytId}`,
+          });
+        });
+
       // If missing synced lyrics, fetch them in background
       if (!currentSong.synced_lyrics) {
         resolveTrackDetails(currentSong.song_name, currentSong.artist_name).then((res) => {
@@ -454,6 +516,19 @@ export const AudioEngine: React.FC = () => {
                 ytPlayerRef.current.pauseVideo();
               }
             }
+
+            // Resolve direct audio stream
+            fetch(`/api/audio-url?id=${res.youtube_id}`)
+              .then((r) => r.json())
+              .then((data) => {
+                if (data?.url) {
+                  updateCurrentSong({
+                    audio_url: data.url,
+                    duration: data.duration,
+                  });
+                }
+              })
+              .catch(() => {});
           }
         })
         .catch(() => {
@@ -465,13 +540,6 @@ export const AudioEngine: React.FC = () => {
   // Handle Play/Pause
   useEffect(() => {
     if (!currentSong) return;
-
-    const isLocalTrack = Boolean(
-      currentSong.audio_url &&
-        (currentSong.audio_url.startsWith('/uploads') ||
-          currentSong.audio_url.startsWith('blob:') ||
-          currentSong.audio_url.includes('127.0.0.1'))
-    );
 
     // Background Keep-Alive Audio: maintains active audio session in mobile OS when minimized
     if (isPlaying) {
@@ -488,11 +556,24 @@ export const AudioEngine: React.FC = () => {
       }
     }
 
-    if (isLocalTrack && audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.play().catch((e) => console.warn('Audio play failed:', e));
-      } else {
-        audioRef.current.pause();
+    const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
+
+    if (currentSong.audio_url) {
+      if (nativeBridge?.resumeStream && nativeBridge?.pauseStream) {
+        try {
+          if (isPlaying) {
+            nativeBridge.resumeStream();
+          } else {
+            nativeBridge.pauseStream();
+          }
+        } catch (_) {}
+      }
+      if (audioRef.current) {
+        if (isPlaying) {
+          audioRef.current.play().catch((e) => console.warn('Audio play failed:', e));
+        } else {
+          audioRef.current.pause();
+        }
       }
     } else if (currentSong.youtube_id && ytPlayerRef.current) {
       try {
@@ -533,17 +614,12 @@ export const AudioEngine: React.FC = () => {
 
     if (isPlaying) {
       intervalRef.current = setInterval(() => {
-        const isLocalTrack = Boolean(
-          currentSong?.audio_url &&
-            (currentSong.audio_url.startsWith('/uploads') ||
-              currentSong.audio_url.startsWith('blob:') ||
-              currentSong.audio_url.includes('127.0.0.1'))
-        );
-
-        if (isLocalTrack && audioRef.current) {
+        if (currentSong?.audio_url && audioRef.current) {
           const t = audioRef.current.currentTime;
-          setCurrentTime(t);
-          if (audioRef.current.duration && !isNaN(audioRef.current.duration)) {
+          if (typeof t === 'number' && !isNaN(t)) {
+            setCurrentTime(t);
+          }
+          if (audioRef.current.duration && !isNaN(audioRef.current.duration) && audioRef.current.duration > 0) {
             setDuration(audioRef.current.duration);
           }
         } else if (currentSong?.youtube_id && ytPlayerRef.current?.getCurrentTime) {
@@ -580,7 +656,14 @@ export const AudioEngine: React.FC = () => {
     const audioDur = audioRef.current?.duration || 0;
     const expectedDur = currentSong.duration || 0;
 
-    if (audioDur <= 35 && expectedDur > 40 && !currentSong.audio_url?.startsWith('/uploads')) {
+    if (
+      audioDur > 0 &&
+      audioDur <= 35 &&
+      expectedDur > 40 &&
+      !currentSong.audio_url?.startsWith('/uploads') &&
+      !currentSong.audio_url?.includes('googlevideo') &&
+      !currentSong.audio_url?.includes('audio-stream')
+    ) {
       // 30s preview ended -> switch seamlessly to full original YouTube track!
       resolveTrackDetails(currentSong.song_name, currentSong.artist_name).then((res) => {
         if (res?.youtube_id) {
