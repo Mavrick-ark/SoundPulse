@@ -124,9 +124,20 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
 
   if (!isAccountModalOpen) return null;
 
-  // Open separate browser window to YouTube Music
+  // Open separate browser popup window to YouTube Music
   const handleOpenYouTubeMusic = () => {
-    window.open('https://music.youtube.com/', '_blank', 'noopener,noreferrer');
+    const width = 600;
+    const height = 750;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    const popup = window.open(
+      'https://music.youtube.com/',
+      'YouTubeMusicLogin',
+      `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes,status=yes`
+    );
+    if (popup && !popup.closed) {
+      popup.focus();
+    }
   };
 
   // Check Android CookieManager or trigger auto-connect
@@ -147,7 +158,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
       }
     }
 
-    // In desktop/mobile web browser: open YouTube Music in a new tab & show cookie import helper modal
+    // In desktop/mobile web browser: open YouTube Music in a popup window & show popup login modal
     handleOpenYouTubeMusic();
     setShowCookieModal(true);
   };
@@ -224,10 +235,51 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
         setCookieModalError(null);
         setPastedClipboardSuccess(true);
         setTimeout(() => setPastedClipboardSuccess(false), 2000);
+        return text.trim();
       }
     } catch {
-      setCookieModalError('Unable to access clipboard. Please paste manually into the text box.');
+      setCookieModalError('Unable to access clipboard. Please grant clipboard permissions or paste manually.');
     }
+    return '';
+  };
+
+  // 1-Click "I've Signed In — Fetch & Import" Handler
+  const handleFetchCookiesFromLogin = async () => {
+    setIsVerifyingCookie(true);
+    setCookieModalError(null);
+
+    // 1. Check if we're on native Android with CookieManager
+    const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
+    if (nativeBridge?.getYouTubeMusicCookies) {
+      const cookies = nativeBridge.getYouTubeMusicCookies();
+      if (cookies && cookies.trim()) {
+        await connectWithCookies(cookies.trim());
+        return;
+      }
+    }
+
+    // 2. If cookieInput is already provided in the text box
+    if (cookieInput && cookieInput.trim()) {
+      await connectWithCookies(cookieInput.trim());
+      return;
+    }
+
+    // 3. Otherwise, try reading from clipboard automatically
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim()) {
+        setCookieInput(text.trim());
+        await connectWithCookies(text.trim());
+        return;
+      }
+    } catch (e) {
+      // Clipboard access might be blocked
+    }
+
+    setIsVerifyingCookie(false);
+    setCookieModalError(
+      'No cookies found yet. Make sure you finished signing in on the YouTube Music popup, then copy your cookies or paste them into the box below.'
+    );
   };
 
   // Import specific playlist into library
@@ -642,10 +694,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                 </div>
                 <div>
                   <h4 className="text-sm sm:text-base font-bold text-white">
-                    YouTube Music Cookie Login
+                    Sign in to YouTube Music
                   </h4>
                   <p className="text-[11px] text-neutral-400">
-                    Direct InnerTube session authorization (SAPISID)
+                    Popup Login & Automatic Session Fetching
                   </p>
                 </div>
               </div>
@@ -662,14 +714,44 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
               </button>
             </div>
 
-            {/* Instructions */}
-            <div className="text-xs text-neutral-300 space-y-1.5 leading-relaxed bg-white/[0.03] p-3 rounded-2xl border border-white/5">
-              <p className="font-semibold text-white">How to connect with session cookies:</p>
-              <ol className="list-decimal list-inside space-y-1 text-[11px] text-neutral-300">
-                <li>Sign in to <span className="text-pink-300 font-mono">music.youtube.com</span> in your browser</li>
-                <li>Copy cookies using an extension (<span className="text-white font-medium">Cookie-Editor</span> or <span className="text-white font-medium">Get cookies.txt</span>)</li>
-                <li>Choose <strong className="text-white">Export &rarr; JSON</strong> or <strong className="text-white">Header</strong></li>
-                <li>Paste below or click &quot;Paste from Clipboard&quot;</li>
+            {/* Quick 2-Step Flow */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={handleOpenYouTubeMusic}
+                className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-xs font-semibold transition-all hover:scale-[1.02] active:scale-95 text-center group"
+              >
+                <ExternalLink className="w-4 h-4 text-pink-400 group-hover:scale-110 transition-transform" />
+                <span>1. Open YouTube Music Popup</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFetchCookiesFromLogin}
+                disabled={isVerifyingCookie}
+                className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-600 to-indigo-600 hover:from-pink-600 hover:to-indigo-700 text-white text-xs font-bold shadow-lg shadow-pink-500/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 text-center"
+              >
+                {isVerifyingCookie ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Fetching Session...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>2. I&apos;m Signed In — Fetch Cookies</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Explanatory Help Card */}
+            <div className="text-xs text-neutral-300 space-y-1.5 leading-relaxed bg-white/[0.02] p-3 rounded-2xl border border-white/5">
+              <p className="font-semibold text-white">How this works:</p>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] text-neutral-400">
+                <li>Click <strong className="text-white">Open YouTube Music Popup</strong> and log in with your Google account.</li>
+                <li>Once logged in, click <strong className="text-pink-300">I&apos;m Signed In — Fetch Cookies</strong>.</li>
+                <li>If using a browser extension (e.g. <em>Cookie-Editor</em>), you can also copy cookies or paste below.</li>
               </ol>
             </div>
 
@@ -677,7 +759,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] font-medium text-neutral-300">
-                  Cookie text, JSON, or header
+                  Cookie text, JSON, or header (optional manual override)
                 </label>
                 <button
                   type="button"
@@ -705,7 +787,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                   if (cookieModalError) setCookieModalError(null);
                 }}
                 placeholder="Paste cookies here: SAPISID=...; __Secure-3PAPISID=...; LOGIN_INFO=..."
-                rows={4}
+                rows={3}
                 className="w-full bg-black/50 border border-white/15 focus:border-pink-500 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none font-mono resize-none transition-colors"
                 disabled={isVerifyingCookie}
               />
