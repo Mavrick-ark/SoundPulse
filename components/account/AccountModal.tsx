@@ -68,6 +68,15 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
 
   // Fetch session & accessible playlists on mount or modal open
   useEffect(() => {
+    // Listen for automatic cookie capture from Android Native Login (YouTubeLoginActivity)
+    if (typeof window !== 'undefined') {
+      (window as any).__soundpulse_cookie_captured = (cookies: string) => {
+        if (cookies && cookies.trim()) {
+          connectWithCookies(cookies.trim());
+        }
+      };
+    }
+
     if (!isAccountModalOpen) return;
 
     fetch('/api/auth/session')
@@ -123,6 +132,13 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
   // Check Android CookieManager or trigger auto-connect
   const handleAutoConnectAndroid = async () => {
     const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
+    
+    // In Android APK, open dedicated YouTube Music Login with automatic cookie extraction
+    if (nativeBridge?.openYouTubeLogin) {
+      nativeBridge.openYouTubeLogin();
+      return;
+    }
+
     if (nativeBridge?.getYouTubeMusicCookies) {
       const cookies = nativeBridge.getYouTubeMusicCookies();
       if (cookies && cookies.trim()) {
@@ -130,7 +146,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
         return;
       }
     }
-    // If no cookies captured yet, open the Cookie Login modal
+
+    // In desktop/mobile web browser: open YouTube Music in a new tab & show cookie import helper modal
+    handleOpenYouTubeMusic();
     setShowCookieModal(true);
   };
 

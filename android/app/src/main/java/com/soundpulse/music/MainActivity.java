@@ -124,6 +124,29 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    public static void dispatchCookieCaptured(final String cookies) {
+        if (instance != null && instance.bridge != null && instance.bridge.getWebView() != null) {
+            instance.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        org.json.JSONObject payload = new org.json.JSONObject();
+                        payload.put("cookies", cookies);
+                        String jsonString = payload.toString();
+                        String js = "if (window.__soundpulse_cookie_captured) { try { var data = " + jsonString + "; window.__soundpulse_cookie_captured(data.cookies); } catch(e){ console.error(e); } }";
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                            instance.bridge.getWebView().evaluateJavascript(js, null);
+                        } else {
+                            instance.bridge.getWebView().loadUrl("javascript:" + js);
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+        }
+    }
+
     public class AudioBridge {
         @JavascriptInterface
         public void notifyPlayback(String title, String artist, boolean isPlaying) {
@@ -226,6 +249,16 @@ public class MainActivity extends BridgeActivity {
                 cm.removeAllCookies(null);
                 cm.flush();
             } catch (Exception e) {}
+        }
+
+        @JavascriptInterface
+        public void openYouTubeLogin() {
+            try {
+                Intent intent = new Intent(MainActivity.this, YouTubeLoginActivity.class);
+                startActivity(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 }
