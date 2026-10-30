@@ -206,5 +206,26 @@ public class MainActivity extends BridgeActivity {
                 e.printStackTrace();
             }
         }
+
+        @JavascriptInterface
+        public String getYouTubeMusicCookies() {
+            try {
+                android.webkit.CookieManager cm = android.webkit.CookieManager.getInstance();
+                String c1 = cm.getCookie("https://music.youtube.com");
+                String c2 = cm.getCookie("https://www.youtube.com");
+                if (c1 != null && !c1.isEmpty()) return c1;
+                if (c2 != null && !c2.isEmpty()) return c2;
+            } catch (Exception e) {}
+            return "";
+        }
+
+        @JavascriptInterface
+        public void clearYouTubeMusicCookies() {
+            try {
+                android.webkit.CookieManager cm = android.webkit.CookieManager.getInstance();
+                cm.removeAllCookies(null);
+                cm.flush();
+            } catch (Exception e) {}
+        }
     }
 }

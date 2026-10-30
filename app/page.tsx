@@ -70,16 +70,17 @@ export default function SoundPulsePage() {
       }
     } catch (_) {}
 
-    // Verify genuine authenticated server session
-    fetch('/api/auth/google/session')
+    // Verify authentic YouTube Music session
+    fetch('/api/auth/session')
       .then((res) => res.json())
       .then((data) => {
         if (data.authenticated && data.user) {
           setConnectedAccount({
             connected: true,
-            name: data.user.name || data.user.channelTitle || 'Google User',
-            email: data.user.email,
-            provider: 'google',
+            name: data.user.name || 'YouTube Music User',
+            email: data.user.handle || data.user.email || 'YouTube Music Session',
+            handle: data.user.handle,
+            provider: 'ytmusic_cookie',
             avatarUrl: data.user.avatarUrl,
             connectedAt: new Date().toISOString(),
           });
