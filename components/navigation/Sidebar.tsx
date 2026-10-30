@@ -148,10 +148,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ playlists }) => {
             </div>
             <div className="min-w-0">
               <div className="text-xs font-semibold text-white truncate">
-                {connectedAccount ? connectedAccount.name : 'Google Account'}
+                {connectedAccount ? connectedAccount.name : 'YouTube Music'}
               </div>
               <div className="text-[10px] text-neutral-400 truncate">
-                {connectedAccount ? 'Connected' : 'Connect Google Account'}
+                {connectedAccount ? (connectedAccount.handle || 'Connected') : 'Sign in with YouTube Music'}
               </div>
             </div>
           </div>

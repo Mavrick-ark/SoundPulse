@@ -22,7 +22,6 @@ import { QueueDrawer } from '@/components/player/QueueDrawer';
 import { FullScreenPlayer } from '@/components/player/FullScreenPlayer';
 import { DeviceImportModal } from '@/components/modals/DeviceImportModal';
 import { AccountModal } from '@/components/account/AccountModal';
-import { GoogleConnectModal } from '@/components/modals/GoogleConnectModal';
 
 export default function SoundPulsePage() {
   const { activeTab, isLyricsOpen, setFavorites, setHistory, setConnectedAccount } = usePlayerStore();
@@ -150,7 +149,6 @@ export default function SoundPulsePage() {
       <FullScreenPlayer />
       <DeviceImportModal onUploadSuccess={loadData} />
       <AccountModal onPlaylistImported={loadData} />
-      <GoogleConnectModal />
     </div>
   );
 }

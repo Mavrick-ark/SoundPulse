@@ -11,7 +11,6 @@ export const Header: React.FC = () => {
     setActiveTab,
     setImportModalOpen,
     setAccountModalOpen,
-    setGoogleModalOpen,
     connectedAccount,
   } = usePlayerStore();
 
@@ -65,7 +64,7 @@ export const Header: React.FC = () => {
             setAccountModalOpen(true);
           }}
           className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-neutral-200 transition-colors cursor-pointer"
-          title={connectedAccount ? 'Manage Connected Account' : 'Connect Account'}
+          title={connectedAccount ? 'YouTube Music Account' : 'Sign in to YouTube Music'}
         >
           {connectedAccount ? (
             <>
@@ -74,8 +73,8 @@ export const Header: React.FC = () => {
             </>
           ) : (
             <>
-              <User className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden md:inline">Connect Account</span>
+              <User className="w-3.5 h-3.5 text-pink-400" />
+              <span className="hidden md:inline">Sign In</span>
             </>
           )}
         </button>

@@ -278,7 +278,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setAccountModalOpen: (open) => set({ isAccountModalOpen: open }),
 
-  setGoogleModalOpen: (open) => set({ isGoogleModalOpen: open }),
+  setGoogleModalOpen: (open) => set({ isAccountModalOpen: open }),
 
   setConnectedAccount: (account) => set({ connectedAccount: account }),
 
