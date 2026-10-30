@@ -70,7 +70,7 @@ export default function SoundPulsePage() {
     } catch (_) {}
 
     // Verify authentic YouTube Music session
-    fetch('/api/auth/session')
+    fetch('/api/auth/session', { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (data.authenticated && data.user) {

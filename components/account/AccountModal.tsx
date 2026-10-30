@@ -89,7 +89,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
 
     if (!isAccountModalOpen) return;
 
-    fetch('/api/auth/session')
+    fetch('/api/auth/session', { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (data.authenticated && data.user) {
@@ -120,7 +120,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
   const fetchAccessiblePlaylists = async () => {
     setIsLoadingPlaylists(true);
     try {
-      const res = await fetch('/api/youtube/playlists');
+      const res = await fetch('/api/youtube/playlists', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setUserPlaylists(data.playlists || []);
@@ -183,6 +183,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
       const res = await fetch('/api/auth/ytmusic/cookie', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ cookies: cookiesText }),
       });
       const data = await res.json();
@@ -216,7 +217,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
   const handleDisconnect = async () => {
     setErrorMsg(null);
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
 
       // Clean up native Android cookies if available
       const nativeBridge = typeof window !== 'undefined' ? (window as any).NativeAudioBridge : null;
@@ -300,6 +301,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
       const res = await fetch('/api/import-playlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ urlOrId: playlist.id }),
       });
       const data = await res.json();
@@ -329,7 +331,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
     setSuccessMsg(null);
 
     try {
-      const res = await fetch('/api/youtube/sync', { method: 'POST' });
+      const res = await fetch('/api/youtube/sync', { method: 'POST', credentials: 'include' });
       const data = await res.json();
 
       if (!res.ok) {
@@ -363,6 +365,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
       const res = await fetch('/api/import-playlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ urlOrId: playlistInput.trim() }),
       });
 

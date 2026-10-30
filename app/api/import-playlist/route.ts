@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserSession } from '@/lib/auth/session';
+import { generateSapisidHash } from '@/lib/ytmusic-auth';
+import { proxiedFetch } from '@/lib/proxy';
 
 export const dynamic = 'force-dynamic';
 
 function extractPlaylistId(urlOrId: string): string | null {
   const trimmed = urlOrId.trim();
-  if (/^[a-zA-Z0-9_-]{12,}$/.test(trimmed)) {
+  if (trimmed === 'LM' || trimmed === 'FEmusic_liked_videos' || /^[a-zA-Z0-9_-]{2,}$/.test(trimmed)) {
     return trimmed;
   }
   const match = trimmed.match(/[?&]list=([a-zA-Z0-9_-]+)/);
@@ -33,6 +36,85 @@ export async function POST(req: NextRequest) {
     const tracks: any[] = [];
     let title = 'Imported YouTube Playlist';
     let creator = 'YouTube Creator';
+
+    const session = await getUserSession();
+
+    // Special handling for Liked Music ("LM") or logged in session
+    if (session?.ytmCookies) {
+      try {
+        const authHeader = generateSapisidHash(session.ytmCookies);
+        if (authHeader) {
+          const browseId = playlistId.startsWith('VL') ? playlistId : (playlistId === 'LM' ? 'FEmusic_liked_videos' : `VL${playlistId}`);
+          const postBody = {
+            context: {
+              client: {
+                clientName: 'WEB_REMIX',
+                clientVersion: '1.20240101.01.00',
+                hl: 'en',
+                gl: 'US',
+              },
+            },
+            browseId,
+          };
+
+          const ytmRes = await proxiedFetch('https://music.youtube.com/youtubei/v1/browse', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              Authorization: authHeader,
+              Cookie: session.ytmCookies,
+              'X-Origin': 'https://music.youtube.com',
+            },
+            body: JSON.stringify(postBody),
+            timeoutMs: 9000,
+          });
+
+          if (ytmRes.ok) {
+            const ytmData = (await ytmRes.json()) as any;
+            const tabs = ytmData?.contents?.singleColumnBrowseResultsRenderer?.tabs || [];
+            const header = ytmData?.header?.musicDetailHeaderRenderer || ytmData?.header?.musicResponsiveHeaderRenderer;
+            if (header) {
+              title = header.title?.runs?.[0]?.text || (playlistId === 'LM' ? 'Liked Music' : title);
+              creator = header.subtitle?.runs?.[0]?.text || session.user.name || creator;
+            } else if (playlistId === 'LM') {
+              title = 'Liked Music';
+              creator = session.user.name || 'You';
+            }
+
+            const sections = tabs[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
+            for (const sec of sections) {
+              const shelf = sec?.musicShelfRenderer || sec?.musicPlaylistShelfRenderer;
+              const contents = shelf?.contents || [];
+              for (const c of contents) {
+                const r = c?.musicResponsiveListItemRenderer;
+                if (!r) continue;
+                const vId = r.playlistItemData?.videoId || r.navigationEndpoint?.watchEndpoint?.videoId;
+                if (!vId) continue;
+                const vTitle = r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Track';
+                const vArtist = r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || creator;
+                const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
+                const vThumb = thumbs[thumbs.length - 1]?.url;
+
+                tracks.push({
+                  id: `yt:${vId}`,
+                  title: vTitle,
+                  artist: vArtist,
+                  artworkUrl: vThumb,
+                  providerId: vId,
+                  source: 'youtube',
+                  duration: 210,
+                  isPlayable: true,
+                });
+              }
+            }
+          }
+        }
+      } catch (authFetchErr) {
+        console.warn('InnerTube authenticated playlist fetch error:', authFetchErr);
+      }
+    }
 
     // 1. Try YouTube Data API if key is present
     if (apiKey && apiKey !== 'your_youtube_api_key_here') {

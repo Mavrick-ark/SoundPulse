@@ -284,43 +284,12 @@ export async function verifyYouTubeMusicSession(
 
 /**
  * Fetch authenticated YouTube Music Playlists via Innertube browse endpoint.
+ * Fetches user's Liked Music ("LM"), library playlists, and created playlists.
  */
 export async function fetchAuthenticatedYTMPlaylists(cookieHeader: string) {
   try {
     const authHeader = generateSapisidHash(cookieHeader);
     if (!authHeader) return [];
-
-    const postBody = {
-      context: {
-        client: {
-          clientName: 'WEB_REMIX',
-          clientVersion: '1.20240101.01.00',
-          hl: 'en',
-          gl: 'US',
-        },
-      },
-      browseId: 'FEmusic_liked_playlists',
-    };
-
-    const res = await proxiedFetch('https://music.youtube.com/youtubei/v1/browse', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Authorization: authHeader,
-        Cookie: cookieHeader,
-        'X-Origin': AUTH_ORIGIN,
-      },
-      body: JSON.stringify(postBody),
-      timeoutMs: 9000,
-    });
-
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as any;
-    const tabs = data?.contents?.singleColumnBrowseResultsRenderer?.tabs || [];
-    const sections = tabs[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
 
     const playlists: Array<{
       id: string;
@@ -330,35 +299,86 @@ export async function fetchAuthenticatedYTMPlaylists(cookieHeader: string) {
       itemCount: number;
     }> = [];
 
-    for (const section of sections) {
-      const grid = section?.gridRenderer?.items || section?.musicShelfRenderer?.contents || [];
-      for (const item of grid) {
-        const renderer =
-          item?.musicTwoRowItemRenderer || item?.musicResponsiveListItemRenderer;
-        if (!renderer) continue;
+    // Always include Liked Music as the first primary playlist
+    playlists.push({
+      id: 'LM',
+      title: 'Liked Music',
+      description: 'Your liked songs on YouTube Music',
+      thumbnail: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&h=600&fit=crop',
+      itemCount: 50,
+    });
 
-        const title =
-          renderer.title?.runs?.[0]?.text ||
-          renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-        const browseId =
-          renderer.navigationEndpoint?.browseEndpoint?.browseId ||
-          renderer.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
+    const browseIds = ['FEmusic_liked_playlists', 'FEmusic_library_landing'];
 
-        if (!title || !browseId) continue;
+    for (const browseId of browseIds) {
+      try {
+        const postBody = {
+          context: {
+            client: {
+              clientName: 'WEB_REMIX',
+              clientVersion: '1.20240101.01.00',
+              hl: 'en',
+              gl: 'US',
+            },
+          },
+          browseId,
+        };
 
-        const thumbs =
-          renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails ||
-          renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ||
-          [];
-        const thumbUrl = thumbs[thumbs.length - 1]?.url;
-
-        playlists.push({
-          id: browseId.replace('VL', ''),
-          title,
-          description: 'YouTube Music Playlist',
-          thumbnail: thumbUrl,
-          itemCount: 25,
+        const res = await proxiedFetch('https://music.youtube.com/youtubei/v1/browse', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Authorization: authHeader,
+            Cookie: cookieHeader,
+            'X-Origin': AUTH_ORIGIN,
+          },
+          body: JSON.stringify(postBody),
+          timeoutMs: 9000,
         });
+
+        if (!res.ok) continue;
+
+        const data = (await res.json()) as any;
+        const tabs = data?.contents?.singleColumnBrowseResultsRenderer?.tabs || [];
+        const sections = tabs[0]?.tabRenderer?.content?.sectionListRenderer?.contents || [];
+
+        for (const section of sections) {
+          const grid = section?.gridRenderer?.items || section?.musicShelfRenderer?.contents || [];
+          for (const item of grid) {
+            const renderer =
+              item?.musicTwoRowItemRenderer || item?.musicResponsiveListItemRenderer;
+            if (!renderer) continue;
+
+            const title =
+              renderer.title?.runs?.[0]?.text ||
+              renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+            const bId =
+              renderer.navigationEndpoint?.browseEndpoint?.browseId ||
+              renderer.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
+
+            if (!title || !bId) continue;
+            const cleanId = bId.replace('VL', '');
+            if (playlists.some((p) => p.id === cleanId)) continue;
+
+            const thumbs =
+              renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails ||
+              renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ||
+              [];
+            const thumbUrl = thumbs[thumbs.length - 1]?.url;
+
+            playlists.push({
+              id: cleanId,
+              title,
+              description: 'YouTube Music Playlist',
+              thumbnail: thumbUrl,
+              itemCount: 25,
+            });
+          }
+        }
+      } catch (subErr) {
+        console.warn(`Error querying browseId ${browseId}:`, subErr);
       }
     }
 
