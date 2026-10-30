@@ -20,6 +20,7 @@ import {
   Check,
   ArrowUpRight,
   Music2,
+  Copy,
 } from 'lucide-react';
 import { usePlayerStore } from '@/lib/store';
 import { createPlaylist } from '@/lib/api';
@@ -58,6 +59,15 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
   const [showCookieModal, setShowCookieModal] = useState(false);
   const [cookieInput, setCookieInput] = useState('');
   const [isVerifyingCookie, setIsVerifyingCookie] = useState(false);
+  const [bookmarkletCopied, setBookmarkletCopied] = useState(false);
+
+  const BOOKMARKLET_CODE = `javascript:(function(){try{const c=document.cookie;if(!c){alert("No cookies found!");return;}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(()=>alert("YouTube Music cookies copied to clipboard! Return to SoundPulse and click 'Connect'")).catch(()=>prompt("Copy your cookies:",c));}else{prompt("Copy your cookies:",c);}}catch(e){alert("Error: "+e);}})();`;
+
+  const copyBookmarklet = () => {
+    navigator.clipboard.writeText(BOOKMARKLET_CODE);
+    setBookmarkletCopied(true);
+    setTimeout(() => setBookmarkletCopied(false), 2500);
+  };
   const [cookieModalError, setCookieModalError] = useState<string | null>(null);
   const [pastedClipboardSuccess, setPastedClipboardSuccess] = useState(false);
 
@@ -727,31 +737,42 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
 
               <button
                 type="button"
-                onClick={handleFetchCookiesFromLogin}
-                disabled={isVerifyingCookie}
-                className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-600 to-indigo-600 hover:from-pink-600 hover:to-indigo-700 text-white text-xs font-bold shadow-lg shadow-pink-500/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 text-center"
+                onClick={copyBookmarklet}
+                className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-xs font-semibold transition-all hover:scale-[1.02] active:scale-95 text-center group"
               >
-                {isVerifyingCookie ? (
+                {bookmarkletCopied ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Fetching Session...</span>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-300">Helper Copied!</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>2. I&apos;m Signed In — Fetch Cookies</span>
+                    <Copy className="w-4 h-4 text-pink-400 group-hover:scale-110 transition-transform" />
+                    <span>2. Copy 1-Click Cookie Copier</span>
                   </>
                 )}
               </button>
             </div>
 
             {/* Explanatory Help Card */}
-            <div className="text-xs text-neutral-300 space-y-1.5 leading-relaxed bg-white/[0.02] p-3 rounded-2xl border border-white/5">
-              <p className="font-semibold text-white">How this works:</p>
-              <ol className="list-decimal list-inside space-y-1 text-[11px] text-neutral-400">
-                <li>Click <strong className="text-white">Open YouTube Music Popup</strong> and log in with your Google account.</li>
-                <li>Once logged in, click <strong className="text-pink-300">I&apos;m Signed In — Fetch Cookies</strong>.</li>
-                <li>If using a browser extension (e.g. <em>Cookie-Editor</em>), you can also copy cookies or paste below.</li>
+            <div className="text-xs text-neutral-300 space-y-2 leading-relaxed bg-white/[0.03] p-3 rounded-2xl border border-white/5">
+              <p className="font-semibold text-white flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+                <span>How to extract cookies from the popup:</span>
+              </p>
+              <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-neutral-300">
+                <li>
+                  Click <strong className="text-white">1. Open YouTube Music Popup</strong> and log in.
+                </li>
+                <li>
+                  Click <strong className="text-white">2. Copy 1-Click Cookie Copier</strong> above.
+                </li>
+                <li>
+                  In the YouTube Music popup, press <kbd className="px-1.5 py-0.5 rounded bg-black/50 border border-white/20 text-pink-300 font-mono">F12</kbd> (or right click &rarr; Inspect), open the <strong className="text-white">Console</strong> tab, press <kbd className="px-1.5 py-0.5 rounded bg-black/50 border border-white/20 text-pink-300 font-mono">Ctrl+V</kbd> and hit <strong className="text-white">Enter</strong>.
+                </li>
+                <li>
+                  Return here and click <strong className="text-pink-300">I&apos;m Signed In — Fetch & Connect</strong> below!
+                </li>
               </ol>
             </div>
 
@@ -759,7 +780,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] font-medium text-neutral-300">
-                  Cookie text, JSON, or header (optional manual override)
+                  Cookie text or JSON (optional manual paste)
                 </label>
                 <button
                   type="button"
@@ -787,7 +808,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                   if (cookieModalError) setCookieModalError(null);
                 }}
                 placeholder="Paste cookies here: SAPISID=...; __Secure-3PAPISID=...; LOGIN_INFO=..."
-                rows={3}
+                rows={2}
                 className="w-full bg-black/50 border border-white/15 focus:border-pink-500 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 outline-none font-mono resize-none transition-colors"
                 disabled={isVerifyingCookie}
               />
@@ -806,8 +827,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
               <span>LastWave never sees your Google password. Session tokens are encrypted with AES-256-GCM.</span>
             </div>
 
-            {/* Actions */}
-            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-white/10">
+            {/* Prominent Footer Actions - Always fully visible and clickable */}
+            <div className="pt-3 flex items-center justify-between gap-3 border-t border-white/10">
               <button
                 type="button"
                 onClick={() => {
@@ -815,15 +836,15 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                   setCookieModalError(null);
                 }}
                 disabled={isVerifyingCookie}
-                className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-neutral-300 transition-colors"
+                className="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-neutral-300 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => connectWithCookies(cookieInput.trim())}
-                disabled={isVerifyingCookie || !cookieInput.trim()}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 disabled:opacity-50 text-white text-xs font-semibold shadow-lg shadow-pink-600/30 transition-all hover:scale-105 active:scale-95"
+                onClick={handleFetchCookiesFromLogin}
+                disabled={isVerifyingCookie}
+                className="flex-1 max-w-xs flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 via-rose-600 to-indigo-600 hover:from-pink-600 hover:to-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-pink-600/30 transition-all hover:scale-[1.02] active:scale-95"
               >
                 {isVerifyingCookie ? (
                   <>
@@ -833,7 +854,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ onPlaylistImported }
                 ) : (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Connect</span>
+                    <span>I&apos;m Signed In — Fetch & Connect</span>
                   </>
                 )}
               </button>
